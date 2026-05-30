@@ -48,15 +48,12 @@ list(REMOVE_ITEM LUA_SOURCES
 )
 add_library(lua_static STATIC ${LUA_SOURCES})
 target_include_directories(lua_static PUBLIC "${lua_SOURCE_DIR}")
-# No ARCHIVE_OUTPUT_DIRECTORY override — let CMake manage the path so
-# target-based linking resolves correctly.
 
 # -- Lua shim -----------------------------------------------------------------
-# sol2's lua_version.hpp does #include <lua.hpp> with angle brackets.
-# The system /usr/include/lua.hpp always wins that lookup over any -I flag.
-# We copy a shim lua.hpp (which re-includes lua.h relatively) plus all
-# Lua public headers into build/lua-shim/ and put that dir first, so
-# <lua.hpp> resolves to our shim instead of the system file.
+# sol2 does #include <lua.hpp> with angle brackets. The system /usr/include/lua.hpp
+# would win that search and pull in a different Lua version. We copy a shim
+# lua.hpp plus all fetched Lua headers into build/lua-shim/ and inject that
+# directory first on the include path so <lua.hpp> resolves to our 5.4.8 headers.
 set(LUA_SHIM_DIR "${CMAKE_BINARY_DIR}/lua-shim")
 file(MAKE_DIRECTORY "${LUA_SHIM_DIR}")
 
@@ -85,14 +82,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(sol2)
 
-# Put shim dir first so <lua.hpp> resolves to our wrapper, not /usr/include.
+# Shim dir must come first so <lua.hpp> resolves to our wrapper, not /usr/include.
 target_include_directories(sol2 INTERFACE
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
 )
-# Do NOT add target_link_libraries(sol2 INTERFACE lua_static) here.
-# sol2 is header-only; its INTERFACE target was created by FetchContent and
-# post-fetch mutations are unreliable. We link lua_static directly below.
 
 # -- nlohmann/json ------------------------------------------------------------
 FetchContent_Declare(
@@ -119,19 +113,12 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${lua_SOURCE_DIR}"
 )
 
-# GCC's single-pass linker discards static archive members it hasn't seen
-# references to yet. sol2 is header-only — all Lua C API call sites live in
-# ScriptingEngine.cpp.o, which is processed before lua_static is considered.
-# --whole-archive forces every object in the archive to be linked in,
-# guaranteeing all symbols are present regardless of order.
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
     glm::glm
     nlohmann_json::nlohmann_json
     sol2
-    -Wl,--whole-archive
     lua_static
-    -Wl,--no-whole-archive
 )
 
 # -- Compiler Warnings --------------------------------------------------------
