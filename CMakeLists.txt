@@ -25,14 +25,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-# -- Lua 5.4 ------------------------------------------------------------------
+# -- Lua 5.4.8 ----------------------------------------------------------------
 # Lua has no CMakeLists.txt so we build it manually.
+# We fetch 5.4.8 to match the CachyOS/Arch system Lua version, which added
+# a third `unsigned seed` argument to lua_newstate().
 # CMP0169: suppress FetchContent_Populate deprecation warning.
 cmake_policy(SET CMP0169 OLD)
 FetchContent_Declare(
     lua
     GIT_REPOSITORY https://github.com/lua/lua.git
-    GIT_TAG        v5.4.7
+    GIT_TAG        v5.4.8
     GIT_SHALLOW    TRUE
 )
 FetchContent_Populate(lua)
@@ -52,27 +54,25 @@ set_target_properties(lua_static PROPERTIES
 
 # -- Lua shim -----------------------------------------------------------------
 # sol2's lua_version.hpp does #include <lua.hpp> with angle brackets.
-# On machines where /usr/include/lua.hpp exists it always wins that lookup
-# regardless of -I / -isystem flags.
-#
-# Solution: copy our shim lua.hpp (which includes lua.h relative to itself)
-# into ${CMAKE_BINARY_DIR}/lua-shim/ alongside symlinked / copied lua.h,
-# lualib.h and lauxlib.h, then put that dir FIRST on the include path.
-# GCC finds <lua.hpp> there before ever reaching /usr/include.
+# The system /usr/include/lua.hpp always wins that lookup over any -I flag.
+# We copy a shim lua.hpp (which re-includes lua.h relatively) plus all
+# Lua public headers into build/lua-shim/ and put that dir first, so
+# <lua.hpp> resolves to our shim instead of the system file.
 set(LUA_SHIM_DIR "${CMAKE_BINARY_DIR}/lua-shim")
 file(MAKE_DIRECTORY "${LUA_SHIM_DIR}")
 
-# Copy the shim wrapper and all Lua public headers into the shim dir.
 configure_file("${CMAKE_SOURCE_DIR}/cmake/lua_shim/lua.hpp"
                "${LUA_SHIM_DIR}/lua.hpp" COPYONLY)
-foreach(_hdr lua.h luaconf.h lualib.h lauxlib.h lua.hpp)
+foreach(_hdr lua.h luaconf.h lualib.h lauxlib.h)
     if(EXISTS "${lua_SOURCE_DIR}/${_hdr}")
         configure_file("${lua_SOURCE_DIR}/${_hdr}"
                        "${LUA_SHIM_DIR}/${_hdr}" COPYONLY)
     endif()
 endforeach()
 
-# -- sol2 ---------------------------------------------------------------------
+# -- sol2 (develop) -----------------------------------------------------------
+# sol2 v3.3.0 does not handle the Lua 5.4.8 lua_newstate(f, ud, seed)
+# 3-argument signature. The develop branch contains the fix.
 set(SOL2_ENABLE_INSTALL FALSE CACHE BOOL   "" FORCE)
 set(SOL2_LUA_VERSION   "5.4"  CACHE STRING "" FORCE)
 set(SOL2_BUILD_LUA     FALSE  CACHE BOOL   "" FORCE)
@@ -81,12 +81,12 @@ set(SOL2_EXAMPLES      FALSE  CACHE BOOL   "" FORCE)
 FetchContent_Declare(
     sol2
     GIT_REPOSITORY https://github.com/ThePhD/sol2.git
-    GIT_TAG        v3.3.0
+    GIT_TAG        develop
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(sol2)
 
-# Put the shim dir first so <lua.hpp> resolves to our wrapper, not /usr/include.
+# Put shim dir first so <lua.hpp> resolves to our wrapper, not /usr/include.
 target_include_directories(sol2 INTERFACE
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
