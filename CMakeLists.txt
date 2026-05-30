@@ -45,17 +45,16 @@ list(REMOVE_ITEM LUA_SOURCES
     "${lua_SOURCE_DIR}/ltests.c"
 )
 add_library(lua_static STATIC ${LUA_SOURCES})
-target_include_directories(lua_static PUBLIC "${lua_SOURCE_DIR}")
-# Place the archive next to other targets so the linker can find it.
+# BEFORE ensures our headers are searched before any system Lua install.
+target_include_directories(lua_static BEFORE PUBLIC "${lua_SOURCE_DIR}")
 set_target_properties(lua_static PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
 # -- sol2 ---------------------------------------------------------------------
-# Disable sol2's own install() rules — they fail because lua_static has none,
-# causing two CMake Generate-step errors about missing export sets.
+# Disable sol2's own install() rules — they fail because lua_static has none.
 set(SOL2_ENABLE_INSTALL FALSE CACHE BOOL   "" FORCE)
-# Disable sol2's own Lua search so it never picks up the system Lua headers.
+# Tell sol2 which Lua version we are using and disable its own Lua search.
 set(SOL2_LUA_VERSION   "5.4"  CACHE STRING "" FORCE)
 set(SOL2_BUILD_LUA     FALSE  CACHE BOOL   "" FORCE)
 set(SOL2_TESTS         FALSE  CACHE BOOL   "" FORCE)
@@ -68,8 +67,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(sol2)
 
-# Force sol2 (header-only interface target) to see our Lua before the system one.
-target_include_directories(sol2 INTERFACE
+# Inject our fetched Lua dir BEFORE system paths on sol2's interface.
+# Using SYSTEM means CMake passes it as -isystem, which GCC searches
+# before /usr/include, preventing the system lua.h from winning.
+target_include_directories(sol2 BEFORE SYSTEM INTERFACE
     "$<BUILD_INTERFACE:${lua_SOURCE_DIR}>"
 )
 target_link_libraries(sol2 INTERFACE lua_static)
