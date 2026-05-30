@@ -52,11 +52,14 @@ set_target_properties(lua_static PROPERTIES
 )
 
 # -- sol2 ---------------------------------------------------------------------
+# Disable sol2's own install() rules — they fail because lua_static has none,
+# causing two CMake Generate-step errors about missing export sets.
+set(SOL2_ENABLE_INSTALL FALSE CACHE BOOL   "" FORCE)
 # Disable sol2's own Lua search so it never picks up the system Lua headers.
-set(SOL2_LUA_VERSION   "5.4" CACHE STRING "" FORCE)
-set(SOL2_BUILD_LUA     FALSE CACHE BOOL   "" FORCE)
-set(SOL2_TESTS         FALSE CACHE BOOL   "" FORCE)
-set(SOL2_EXAMPLES      FALSE CACHE BOOL   "" FORCE)
+set(SOL2_LUA_VERSION   "5.4"  CACHE STRING "" FORCE)
+set(SOL2_BUILD_LUA     FALSE  CACHE BOOL   "" FORCE)
+set(SOL2_TESTS         FALSE  CACHE BOOL   "" FORCE)
+set(SOL2_EXAMPLES      FALSE  CACHE BOOL   "" FORCE)
 FetchContent_Declare(
     sol2
     GIT_REPOSITORY https://github.com/ThePhD/sol2.git
