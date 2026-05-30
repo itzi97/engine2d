@@ -121,7 +121,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
     glm::glm
-    sol2              # pulls in lua_static transitively
+    sol2              # pulls in lua_static via INTERFACE
+    lua_static        # explicit: guarantees Lua C API symbols are linked
     nlohmann_json::nlohmann_json
 )
 
