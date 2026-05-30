@@ -48,9 +48,8 @@ list(REMOVE_ITEM LUA_SOURCES
 )
 add_library(lua_static STATIC ${LUA_SOURCES})
 target_include_directories(lua_static PUBLIC "${lua_SOURCE_DIR}")
-set_target_properties(lua_static PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-)
+# No ARCHIVE_OUTPUT_DIRECTORY override — let CMake manage the path so
+# target-based linking resolves correctly.
 
 # -- Lua shim -----------------------------------------------------------------
 # sol2's lua_version.hpp does #include <lua.hpp> with angle brackets.
@@ -91,7 +90,9 @@ target_include_directories(sol2 INTERFACE
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
 )
-target_link_libraries(sol2 INTERFACE lua_static)
+# Do NOT add target_link_libraries(sol2 INTERFACE lua_static) here.
+# sol2 is header-only; its INTERFACE target was created by FetchContent and
+# post-fetch mutations are unreliable. We link lua_static directly below.
 
 # -- nlohmann/json ------------------------------------------------------------
 FetchContent_Declare(
@@ -118,15 +119,19 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${lua_SOURCE_DIR}"
 )
 
-# Link order matters for GCC on Linux: the executable's own objects must come
-# first, then sol2 (header-only INTERFACE), then lua_static last so the linker
-# sees the references before it decides to discard the archive.
+# GCC's single-pass linker discards static archive members it hasn't seen
+# references to yet. sol2 is header-only — all Lua C API call sites live in
+# ScriptingEngine.cpp.o, which is processed before lua_static is considered.
+# --whole-archive forces every object in the archive to be linked in,
+# guaranteeing all symbols are present regardless of order.
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
     glm::glm
     nlohmann_json::nlohmann_json
-    sol2              # INTERFACE: expands to lua_static transitively
-    lua_static        # explicit tail position — satisfies all Lua C API refs
+    sol2
+    -Wl,--whole-archive
+    lua_static
+    -Wl,--no-whole-archive
 )
 
 # -- Compiler Warnings --------------------------------------------------------
