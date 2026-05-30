@@ -50,6 +50,28 @@ set_target_properties(lua_static PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+# -- Lua shim -----------------------------------------------------------------
+# sol2's lua_version.hpp does #include <lua.hpp> with angle brackets.
+# On machines where /usr/include/lua.hpp exists it always wins that lookup
+# regardless of -I / -isystem flags.
+#
+# Solution: copy our shim lua.hpp (which includes lua.h relative to itself)
+# into ${CMAKE_BINARY_DIR}/lua-shim/ alongside symlinked / copied lua.h,
+# lualib.h and lauxlib.h, then put that dir FIRST on the include path.
+# GCC finds <lua.hpp> there before ever reaching /usr/include.
+set(LUA_SHIM_DIR "${CMAKE_BINARY_DIR}/lua-shim")
+file(MAKE_DIRECTORY "${LUA_SHIM_DIR}")
+
+# Copy the shim wrapper and all Lua public headers into the shim dir.
+configure_file("${CMAKE_SOURCE_DIR}/cmake/lua_shim/lua.hpp"
+               "${LUA_SHIM_DIR}/lua.hpp" COPYONLY)
+foreach(_hdr lua.h luaconf.h lualib.h lauxlib.h lua.hpp)
+    if(EXISTS "${lua_SOURCE_DIR}/${_hdr}")
+        configure_file("${lua_SOURCE_DIR}/${_hdr}"
+                       "${LUA_SHIM_DIR}/${_hdr}" COPYONLY)
+    endif()
+endforeach()
+
 # -- sol2 ---------------------------------------------------------------------
 set(SOL2_ENABLE_INSTALL FALSE CACHE BOOL   "" FORCE)
 set(SOL2_LUA_VERSION   "5.4"  CACHE STRING "" FORCE)
@@ -64,16 +86,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(sol2)
 
-# Two separate calls — CMake rejects BEFORE and SYSTEM in the same invocation.
-# SYSTEM registers the path as -isystem so GCC searches it before /usr/include,
-# preventing the system lua.h from shadowing our fetched Lua 5.4.7 headers.
-target_include_directories(sol2 SYSTEM INTERFACE
-    "$<BUILD_INTERFACE:${lua_SOURCE_DIR}>"
-)
-# Append the same path as a normal INTERFACE dir so it also appears in the
-# consumer's include list (SYSTEM alone may not propagate on all generators).
+# Put the shim dir first so <lua.hpp> resolves to our wrapper, not /usr/include.
 target_include_directories(sol2 INTERFACE
-    "$<BUILD_INTERFACE:${lua_SOURCE_DIR}>"
+    "${LUA_SHIM_DIR}"
+    "${lua_SOURCE_DIR}"
 )
 target_link_libraries(sol2 INTERFACE lua_static)
 
@@ -96,10 +112,9 @@ set(ENGINE_SOURCES
 
 add_executable(${PROJECT_NAME} ${ENGINE_SOURCES})
 
-target_include_directories(${PROJECT_NAME} PRIVATE src)
-
-# Also push our Lua dir ahead of system paths directly on the engine target.
-target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+target_include_directories(${PROJECT_NAME} PRIVATE
+    src
+    "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
 )
 
