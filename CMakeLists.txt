@@ -32,6 +32,9 @@ FetchContent_Declare(
     GIT_TAG        v5.4.7
     GIT_SHALLOW    TRUE
 )
+
+# Suppress CMP0169 deprecation for Lua (no CMakeLists.txt in the repo)
+cmake_policy(SET CMP0169 OLD)
 FetchContent_Populate(lua)
 
 file(GLOB LUA_SOURCES "${lua_SOURCE_DIR}/*.c")
