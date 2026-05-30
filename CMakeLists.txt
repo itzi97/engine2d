@@ -118,12 +118,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${lua_SOURCE_DIR}"
 )
 
+# Link order matters for GCC on Linux: the executable's own objects must come
+# first, then sol2 (header-only INTERFACE), then lua_static last so the linker
+# sees the references before it decides to discard the archive.
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
     glm::glm
-    sol2              # pulls in lua_static via INTERFACE
-    lua_static        # explicit: guarantees Lua C API symbols are linked
     nlohmann_json::nlohmann_json
+    sol2              # INTERFACE: expands to lua_static transitively
+    lua_static        # explicit tail position — satisfies all Lua C API refs
 )
 
 # -- Compiler Warnings --------------------------------------------------------
