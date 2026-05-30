@@ -6,3 +6,11 @@ compile_commands.json
 *.so
 *.dylib
 *.exe
+
+# CMake generated — never commit these
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles/
+CPackConfig.cmake
+CPackSourceConfig.cmake
+_deps/
