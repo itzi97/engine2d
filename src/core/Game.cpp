@@ -3,6 +3,10 @@
 #include <SDL3/SDL.h>
 #include <iostream>
 
+// Include Components
+#include "../ecs/components/SpriteComponent.hpp"
+#include "../ecs/components/TransformComponent.hpp"
+
 Game::Game() = default;
 Game::~Game() = default;
 
@@ -31,6 +35,18 @@ bool Game::Initialize() {
   m_scripting = std::make_unique<ScriptingEngine>();
 
   std::cout << "[Game] Initialized OK (" << kWidth << 'x' << kHeight << ")\n";
+
+  // Create Test entity
+  EntityId e = m_world->CreateEntity();
+
+  auto &transform = m_world->AddComponent<TransformComponent>(e);
+  transform.position = {100.0f, 100.0f};
+  transform.size = {64.0f, 64.0f};
+
+  auto &sprite = m_world->AddComponent<SpriteComponent>(
+      e, &transform, SDL_Color{200, 80, 80, 255});
+
+  std::cout << "[Game] Entity Created: " << e << "\n";
   return true;
 }
 
