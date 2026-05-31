@@ -18,7 +18,7 @@ struct TransformComponent : Component {
   TransformComponent(glm::vec2 pos, glm::vec2 scl = {1, 1}, float rot = 0.0f)
       : position(pos), scale(scl), rotation(rot) {}
 
-  void Update(float dt) override {
+  void Update([[maybe_unused]] float dt) override {
     // TODO: Uncomment when snake is handled better
     // velocity += acceleration * dt;
     // position += velocity * dt;
