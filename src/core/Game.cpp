@@ -96,19 +96,28 @@ void Game::ProcessEvents(bool &running) {
       running = false;
     if (event.type == SDL_EVENT_KEY_DOWN) {
       if (auto *t = m_world->GetComponent<TransformComponent>(m_snakeHead)) {
+        glm::vec2 newDir = t->velocity;
+
         switch (event.key.key) {
         case SDLK_UP:
-          t->velocity = {0.0f, -1.0f};
+          newDir = {0.0f, -1.0f};
           break;
         case SDLK_DOWN:
-          t->velocity = {0.0f, +1.0f};
+          newDir = {0.0f, +1.0f};
           break;
         case SDLK_LEFT:
-          t->velocity = {-1.0f, 0.0f};
+          newDir = {-1.0f, 0.0f};
           break;
         case SDLK_RIGHT:
-          t->velocity = {+1.0f, 0.0f};
+          newDir = {+1.0f, 0.0f};
           break;
+        default:
+          break;
+        }
+
+        // Reject exact opposite direction
+        if (!(newDir.x == -t->velocity.x && newDir.y == -t->velocity.y)) {
+          t->velocity = newDir;
         }
       }
     }
