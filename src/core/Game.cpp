@@ -4,8 +4,8 @@
 #include <iostream>
 
 // Include Components
-#include "../ecs/components/SpriteComponent.hpp"
-#include "../ecs/components/TransformComponent.hpp"
+#include "ecs/components/SpriteComponent.hpp"
+#include "ecs/components/TransformComponent.hpp"
 
 Game::Game() = default;
 Game::~Game() = default;
@@ -36,17 +36,42 @@ bool Game::Initialize() {
 
   std::cout << "[Game] Initialized OK (" << kWidth << 'x' << kHeight << ")\n";
 
-  // Create Test entity
-  EntityId e = m_world->CreateEntity();
+  // Create first test entity
+  EntityId e1 = m_world->CreateEntity();
 
-  auto &transform = m_world->AddComponent<TransformComponent>(e);
-  transform.position = {100.0f, 100.0f};
-  transform.size = {64.0f, 64.0f};
+  auto &transform1 = m_world->AddComponent<TransformComponent>(e1);
+  transform1.position = {100.0f, 100.0f};
+  transform1.size = {64.0f, 64.0f};
 
-  auto &sprite = m_world->AddComponent<SpriteComponent>(
-      e, &transform, SDL_Color{200, 80, 80, 255});
+  auto &sprite1 = m_world->AddComponent<SpriteComponent>(
+      e1, &transform1, SDL_Color{200, 80, 80, 255});
 
-  std::cout << "[Game] Entity Created: " << e << "\n";
+  std::cout << "[Game] Entity Created: " << e1 << "\n";
+
+  // Create second test entity
+  EntityId e2 = m_world->CreateEntity();
+
+  auto &transform2 = m_world->AddComponent<TransformComponent>(e2);
+  transform2.position = {300.0f, 200.0f};
+  transform2.size = {128.0f, 128.0f};
+
+  auto &sprite2 = m_world->AddComponent<SpriteComponent>(
+      e2, &transform2, SDL_Color{200, 255, 80, 80});
+
+  std::cout << "[Game] Entity Created: " << e2 << "\n";
+
+  // Create third test entity
+  EntityId e3 = m_world->CreateEntity();
+
+  auto &transform3 = m_world->AddComponent<TransformComponent>(e3);
+  transform3.position = {500.0f, 300.0f};
+  transform3.size = {48.0f, 48.0f};
+
+  auto &sprite3 = m_world->AddComponent<SpriteComponent>(
+      e3, &transform3, SDL_Color{200, 80, 255, 80});
+
+  std::cout << "[Game] Entity Created: " << e3 << "\n";
+
   return true;
 }
 

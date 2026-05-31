@@ -1,6 +1,6 @@
 #pragma once
-#include "../Component.hpp"
-#include "./TransformComponent.hpp"
+#include "ecs/Component.hpp"
+#include "ecs/components/TransformComponent.hpp"
 #include <SDL3/SDL.h>
 
 class SpriteComponent : public Component {

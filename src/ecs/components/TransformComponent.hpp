@@ -1,7 +1,7 @@
 // src/etc/components/TransformerComponent.hpp
 #pragma once
 
-#include "../Component.hpp"
+#include "ecs/Component.hpp"
 #include <glm/vec2.hpp>
 
 struct TransformComponent : Component {
