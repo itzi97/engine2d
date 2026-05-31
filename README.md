@@ -2,6 +2,8 @@
 
 A 2D game engine built from scratch in **C++20**, focused on a simple ECS architecture, SDL3 rendering, and Lua scripting.
 
+Currently, the engine drives a simple **Snake** prototype to validate the ECS, rendering, input, and timing model.
+
 ## Stack
 
 | Layer                        | Library             |
@@ -26,6 +28,25 @@ The engine uses an Entity-Component System (ECS) with flat component storages ke
 - **Scripting** is isolated behind a `ScriptingEngine` in `src/scripting/` to avoid sol2 compile-time bleed into the rest of the codebase.
 
 The goal is to keep the core small and explicit: the `Game` object owns one `World` and one `ScriptingEngine`, and drives them from a central loop.
+
+### Current gameplay demo: Snake
+
+The current demo is a minimal, classic grid-based **Snake** implementation used to exercise the engine:
+
+- The **snake head** is an entity with:
+  - `TransformComponent` (grid-aligned position and size)
+  - `SpriteComponent` (rendered as a green square)
+  - `TagComponent` with `"snake_head"`
+- **Food** is a separate entity with:
+  - `TransformComponent` (grid-aligned position and size)
+  - `SpriteComponent` (rendered as a red square)
+  - `TagComponent` with `"food"`
+- Movement is handled via:
+  - A unit grid direction stored in the transform (velocity `{±1,0}` or `{0,±1}`)
+  - A fixed **snake step time** (e.g. 10 moves per second), moving the head exactly one cell per step
+  - 180° reversals are prevented by rejecting direction changes that are exact opposites of the current direction.
+
+Snake logic lives in `Game` for now as a C++ prototype and is intended to be moved into Lua scripts once the engine-side API (entity creation, component access, input, timing) is stable.
 
 ## Prerequisites
 
@@ -89,6 +110,10 @@ Adjust the config (`Debug`/`Release`) as needed.
 - A window titled **“2D Engine”** is created at 1280×720 by default.
 - Press **Escape** or close the window to exit the main loop.
 - The background currently clears to a dark gray, and the `World` is responsible for updating and rendering all components each frame.
+- The Snake demo currently consists of:
+  - A snake head that moves one grid cell at a time in response to arrow keys.
+  - A food block that spawns at a fixed grid position at startup.
+  - (Work in progress) eating food and growing the snake body.
 
 ## Project layout
 
@@ -96,8 +121,8 @@ High‑level source layout:
 
 ```text
 src/
-  core/       # Game loop, SDL initialization, main engine entry
-  ecs/        # ECS primitives: Entity, Component, World
+  core/       # Game loop, SDL initialization, main engine entry (includes Snake demo for now)
+  ecs/        # ECS primitives and components (Entity, Component, World, Transform, Sprite, Tag, ...)
   scripting/  # Lua / sol2 bindings (ScriptingEngine)
   main.cpp    # entry point that creates and runs Game
 assets/
@@ -110,9 +135,9 @@ The intention is to keep SDL- and Lua-specific code isolated to `core/` and `scr
 
 This project is a work in progress. The short‑term roadmap includes:
 
-- Core components (Transform, Sprite, etc.)
-- Basic rendering system for sprites and tilemaps
-- Tiled map loading via JSON
-- Exposing engine APIs to Lua for gameplay scripting
+- Flesh out core components (Transform, Sprite, Tag, simple motion, etc.)
+- Finalize a thin C++ API for entity/component access, input, and timing
+- Move the Snake demo game logic into Lua as a scripted example
+- Add basic tilemap rendering (Tiled JSON) and collision for more complex demos
 
 Contributions and feedback are welcome once the public API stabilizes.
