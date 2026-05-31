@@ -4,6 +4,8 @@ A 2D game engine built from scratch in **C++20**, focused on a simple ECS archit
 
 Currently, the engine drives a simple **Snake** prototype to validate the ECS, rendering, input, and timing model.
 
+Licensed under the **MIT License**. See `LICENSE` for details.
+
 ## Stack
 
 | Layer                        | Library             |
