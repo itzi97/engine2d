@@ -131,6 +131,19 @@ assets/
 
 The intention is to keep SDL- and Lua-specific code isolated to `core/` and `scripting/` respectively, so the ECS layer remains decoupled from platform details.
 
+## Third‑party libraries
+
+This project uses the following third‑party libraries and tools:
+
+- **SDL3** – windowing, rendering, input, and basic platform abstraction. Licensed under the zlib license.
+- **GLM** – header‑only math library for vectors, matrices, and transforms. Licensed under the MIT license.
+- **Lua 5.4** – embedded scripting language used for gameplay scripting. Licensed under the MIT license.
+- **sol2** – C++17/20 bindings between Lua and C++. Licensed under the MIT license.
+- **nlohmann/json** – header‑only JSON library used for parsing Tiled maps. Licensed under the MIT license.
+- **CMake** – build system generator.
+
+You are responsible for complying with the licenses of these dependencies when using or redistributing this project.
+
 ## Status
 
 This project is a work in progress. The short‑term roadmap includes:
