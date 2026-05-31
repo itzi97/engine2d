@@ -5,6 +5,7 @@
 
 // Include Components
 #include "ecs/components/SpriteComponent.hpp"
+#include "ecs/components/TagComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
 
 Game::Game() = default;
@@ -42,8 +43,13 @@ bool Game::Initialize() {
   t.position = {10.0f * cellSize, 10.0f * cellSize};
   t.size = {cellSize, cellSize};
   t.velocity = {1.0f, 0.0f};
+  auto &headTag = m_world->AddComponent<TagComponent>(m_snakeHead);
+  headTag.tag = "snake_head";
   m_world->AddComponent<SpriteComponent>(m_snakeHead, &t,
                                          SDL_Color{0, 255, 0, 255});
+
+  // Spawn food
+  SpawnFood();
 
   return true;
 }
@@ -147,4 +153,17 @@ void Game::UpdateSnakeStep() {
     t->position.x += t->velocity.x * cellSize;
     t->position.y += t->velocity.y * cellSize;
   }
+}
+
+void Game::SpawnFood() {
+  m_food = m_world->CreateEntity();
+
+  auto &t = m_world->AddComponent<TransformComponent>(m_food);
+  t.position = {5.0f * cellSize, 5.0f * cellSize}; // placeholder
+  t.size = {cellSize, cellSize};
+
+  m_world->AddComponent<SpriteComponent>(m_food, &t, SDL_Color{255, 0, 0, 255});
+
+  auto &tag = m_world->AddComponent<TagComponent>(m_food);
+  tag.tag = "food";
 }
