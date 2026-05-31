@@ -10,9 +10,6 @@
 Game::Game() = default;
 Game::~Game() = default;
 
-// TODO: Remove later
-const float cellSize = 32.0f;
-
 bool Game::Initialize() {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
     std::cerr << "[Game] SDL_Init failed: " << SDL_GetError() << '\n';
@@ -44,7 +41,7 @@ bool Game::Initialize() {
   auto &t = m_world->AddComponent<TransformComponent>(m_snakeHead);
   t.position = {10.0f * cellSize, 10.0f * cellSize};
   t.size = {cellSize, cellSize};
-  t.velocity = {cellSize, 0.0f};
+  t.velocity = {1.0f, 0.0f};
   m_world->AddComponent<SpriteComponent>(m_snakeHead, &t,
                                          SDL_Color{0, 255, 0, 255});
 
@@ -101,16 +98,16 @@ void Game::ProcessEvents(bool &running) {
       if (auto *t = m_world->GetComponent<TransformComponent>(m_snakeHead)) {
         switch (event.key.key) {
         case SDLK_UP:
-          t->velocity = {0.0f, -cellSize};
+          t->velocity = {0.0f, -1.0f};
           break;
         case SDLK_DOWN:
-          t->velocity = {0.0f, +cellSize};
+          t->velocity = {0.0f, +1.0f};
           break;
         case SDLK_LEFT:
-          t->velocity = {-cellSize, 0.0f};
+          t->velocity = {-1.0f, 0.0f};
           break;
         case SDLK_RIGHT:
-          t->velocity = {+cellSize, 0.0f};
+          t->velocity = {+1.0f, 0.0f};
           break;
         }
       }
@@ -118,11 +115,27 @@ void Game::ProcessEvents(bool &running) {
   }
 }
 
-void Game::Update(float deltaTime) { m_world->Update(deltaTime); }
+void Game::Update(float deltaTime) {
+  m_world->Update(deltaTime);
+
+  m_snakeAccumulator += deltaTime;
+  while (m_snakeAccumulator >= kSnakeStepTime) {
+    UpdateSnakeStep();
+    m_snakeAccumulator -= kSnakeStepTime;
+  }
+}
 
 void Game::Render() {
   SDL_SetRenderDrawColor(m_renderer, 18, 18, 18, 255);
   SDL_RenderClear(m_renderer);
   m_world->Render(m_renderer);
   SDL_RenderPresent(m_renderer);
+}
+
+void Game::UpdateSnakeStep() {
+  if (auto *t = m_world->GetComponent<TransformComponent>(m_snakeHead)) {
+    // velocity is a unit grid direction now
+    t->position.x += t->velocity.x * cellSize;
+    t->position.y += t->velocity.y * cellSize;
+  }
 }

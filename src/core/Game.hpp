@@ -7,6 +7,10 @@
 #include <memory>
 #include <string_view>
 
+float m_snakeAccumulator = 0.0f;
+static constexpr float kSnakeStepTime = 1.0f / 10.0f;
+static const float cellSize = 32.0f;
+
 class Game {
 public:
   Game();
@@ -39,4 +43,6 @@ private:
 
   // TODO: Move to Lua
   EntityId m_snakeHead{};
+
+  void UpdateSnakeStep();
 };

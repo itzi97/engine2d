@@ -19,8 +19,9 @@ struct TransformComponent : Component {
       : position(pos), scale(scl), rotation(rot) {}
 
   void Update(float dt) override {
-    velocity += acceleration * dt;
-    position += velocity * dt;
+    // TODO: Uncomment when snake is handled better
+    // velocity += acceleration * dt;
+    // position += velocity * dt;
   }
   void Render(SDL_Renderer *) override {} // transform doesn't render itself
 };
