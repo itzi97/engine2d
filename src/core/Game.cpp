@@ -10,6 +10,9 @@
 Game::Game() = default;
 Game::~Game() = default;
 
+// TODO: Remove later
+const float cellSize = 32.0f;
+
 bool Game::Initialize() {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
     std::cerr << "[Game] SDL_Init failed: " << SDL_GetError() << '\n';
@@ -36,43 +39,14 @@ bool Game::Initialize() {
 
   std::cout << "[Game] Initialized OK (" << kWidth << 'x' << kHeight << ")\n";
 
-  // Create first test entity
-  EntityId e1 = m_world->CreateEntity();
-
-  auto &transform1 = m_world->AddComponent<TransformComponent>(e1);
-  transform1.position = {100.0f, 100.0f};
-  transform1.size = {64.0f, 64.0f};
-  transform1.velocity = {5.0f, 0.0f};
-  transform1.acceleration = {1.0f, 1.0f};
-
-  auto &sprite1 = m_world->AddComponent<SpriteComponent>(
-      e1, &transform1, SDL_Color{200, 80, 80, 255});
-
-  std::cout << "[Game] Entity Created: " << e1 << "\n";
-
-  // Create second test entity
-  EntityId e2 = m_world->CreateEntity();
-
-  auto &transform2 = m_world->AddComponent<TransformComponent>(e2);
-  transform2.position = {300.0f, 200.0f};
-  transform2.size = {128.0f, 128.0f};
-
-  auto &sprite2 = m_world->AddComponent<SpriteComponent>(
-      e2, &transform2, SDL_Color{200, 255, 80, 80});
-
-  std::cout << "[Game] Entity Created: " << e2 << "\n";
-
-  // Create third test entity
-  EntityId e3 = m_world->CreateEntity();
-
-  auto &transform3 = m_world->AddComponent<TransformComponent>(e3);
-  transform3.position = {500.0f, 300.0f};
-  transform3.size = {48.0f, 48.0f};
-
-  auto &sprite3 = m_world->AddComponent<SpriteComponent>(
-      e3, &transform3, SDL_Color{200, 80, 255, 80});
-
-  std::cout << "[Game] Entity Created: " << e3 << "\n";
+  // Create snake head
+  m_snakeHead = m_world->CreateEntity();
+  auto &t = m_world->AddComponent<TransformComponent>(m_snakeHead);
+  t.position = {10.0f * cellSize, 10.0f * cellSize};
+  t.size = {cellSize, cellSize};
+  t.velocity = {cellSize, 0.0f};
+  m_world->AddComponent<SpriteComponent>(m_snakeHead, &t,
+                                         SDL_Color{0, 255, 0, 255});
 
   return true;
 }
@@ -123,6 +97,24 @@ void Game::ProcessEvents(bool &running) {
       running = false;
     if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)
       running = false;
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+      if (auto *t = m_world->GetComponent<TransformComponent>(m_snakeHead)) {
+        switch (event.key.key) {
+        case SDLK_UP:
+          t->velocity = {0.0f, -cellSize};
+          break;
+        case SDLK_DOWN:
+          t->velocity = {0.0f, +cellSize};
+          break;
+        case SDLK_LEFT:
+          t->velocity = {-cellSize, 0.0f};
+          break;
+        case SDLK_RIGHT:
+          t->velocity = {+cellSize, 0.0f};
+          break;
+        }
+      }
+    }
   }
 }
 
