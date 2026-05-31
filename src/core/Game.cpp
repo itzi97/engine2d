@@ -42,6 +42,8 @@ bool Game::Initialize() {
   auto &transform1 = m_world->AddComponent<TransformComponent>(e1);
   transform1.position = {100.0f, 100.0f};
   transform1.size = {64.0f, 64.0f};
+  transform1.velocity = {5.0f, 0.0f};
+  transform1.acceleration = {1.0f, 1.0f};
 
   auto &sprite1 = m_world->AddComponent<SpriteComponent>(
       e1, &transform1, SDL_Color{200, 80, 80, 255});
