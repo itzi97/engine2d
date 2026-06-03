@@ -24,24 +24,16 @@ struct IComponentStorage {
 };
 
 // ---------------------------------------------------------------------------
-// PackedStorage<T>: contiguous vector + O(1) lookup + swap-and-pop removal.
-//
-// Prefer ForEach for normal iteration — it hides the parallel-array layout
-// and prevents callers from indexing components/entities directly.
-// GetStorage<T>() is available for systems that need two storages at once
-// (e.g. CollisionSystem), but should not be the default.
+// PackedStorage<T>
 // ---------------------------------------------------------------------------
 template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
-  // ForEach: iterate all (entity, component) pairs.
-  // fn signature: void(EntityId, T&)
   template <typename Fn>
   void ForEach(Fn &&fn) {
     for (size_t i = 0; i < entities.size(); ++i)
       fn(entities[i], components[i]);
   }
 
-  // Const overload for read-only access.
   template <typename Fn>
   void ForEach(Fn &&fn) const {
     for (size_t i = 0; i < entities.size(); ++i)
@@ -79,7 +71,7 @@ struct PackedStorage final : IComponentStorage {
     index.erase(entity);
   }
 
-  // Raw arrays — only use these when ForEach is insufficient (e.g. two-storage joins).
+  // Raw arrays — only use when ForEach is insufficient (e.g. two-storage joins).
   std::vector<T>                       components;
   std::vector<EntityId>                entities;
   std::unordered_map<EntityId, size_t> index;
@@ -96,7 +88,6 @@ public:
   World(const World &)            = delete;
   World &operator=(const World &) = delete;
 
-  // CreateEntity: reuses a recycled ID from the free list before minting a new one.
   [[nodiscard]] EntityId CreateEntity() {
     if (!m_freeList.empty()) {
       const EntityId id = m_freeList.front();
@@ -106,7 +97,6 @@ public:
     return Entity::Create();
   }
 
-  // DestroyEntity: erases all components and returns the ID to the free list.
   void DestroyEntity(EntityId entity) {
     for (auto &[type, storage] : m_storages)
       storage->Erase(entity);
@@ -132,7 +122,6 @@ public:
     it->second->Erase(entity);
   }
 
-  // ForEach<T>: iterate all (EntityId, T&) pairs without exposing storage layout.
   template <ComponentType T, typename Fn>
   void ForEach(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -140,7 +129,6 @@ public:
     static_cast<PackedStorage<T> *>(it->second.get())->ForEach(std::forward<Fn>(fn));
   }
 
-  // GetStorage: returns the raw storage — use only when ForEach is insufficient.
   template <ComponentType T>
   [[nodiscard]] PackedStorage<T> *GetStorage() {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -148,12 +136,14 @@ public:
     return static_cast<PackedStorage<T> *>(it->second.get());
   }
 
-  void Update(float deltaTime);
+  // Called by Game::Run in order: Update -> CallOnUpdate -> RunCollision -> Render
+  void Update(float deltaTime);  // physics only
+  void RunCollision();           // AABB detection on final positions
   void Render(SDL_Renderer *renderer);
 
 private:
   std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_storages;
-  std::queue<EntityId> m_freeList;  // recycled IDs, handed out before minting new ones
+  std::queue<EntityId> m_freeList;
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {

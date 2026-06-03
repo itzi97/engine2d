@@ -1,4 +1,4 @@
--- snake.lua -- all game logic lives here, engine is just a host
+-- snake.lua
 
 local CELL  = 32
 local COLS  = 40   -- 1280 / 32
@@ -15,7 +15,6 @@ local function make_segment(x, y, r, g, b)
 end
 
 local function spawn_food(snake_body)
-  -- simple retry loop: re-roll until we land on an empty cell
   local x, y
   repeat
     x = math.random(0, COLS - 1) * CELL
@@ -33,13 +32,12 @@ end
 
 math.randomseed(os.time and os.time() or 12345)
 
-local head      = make_segment(10 * CELL, 10 * CELL, 0, 255, 0)
-local body      = {}          -- ordered list of segment EntityIds (excl. head)
-local dir       = {x=1, y=0}  -- current direction (unit grid vector)
-local next_dir  = {x=1, y=0}  -- buffered next direction
+local head        = make_segment(10 * CELL, 10 * CELL, 0, 255, 0)
+local body        = {}           -- ordered list of segment EntityIds (excl. head)
+local dir         = {x=1, y=0}   -- current direction
+local next_dir    = {x=1, y=0}   -- buffered next direction
 local accumulator = 0
 
--- food
 local food_entity = world.create_entity()
 do
   local fx, fy = spawn_food({head})
@@ -56,9 +54,10 @@ local function reset()
   for _, seg in ipairs(body) do
     world.destroy_entity(seg)
   end
-  body     = {}
-  dir      = {x=1, y=0}
-  next_dir = {x=1, y=0}
+  body        = {}
+  dir         = {x=1, y=0}
+  next_dir    = {x=1, y=0}
+  accumulator = 0   -- prevent a leftover tick firing immediately after reset
   world.set_position(head, 10 * CELL, 10 * CELL)
 
   local fx, fy = spawn_food({head})
@@ -69,23 +68,19 @@ end
 -- ── snake step ───────────────────────────────────────────────────────────────
 
 local function snake_step()
-  -- apply buffered direction
   dir = next_dir
 
   local hx, hy = world.get_position(head)
-  local prev   = {x = hx, y = hy}  -- save head pos before move
+  local prev   = {x = hx, y = hy}
 
-  -- move head
   world.set_position(head, hx + dir.x * CELL, hy + dir.y * CELL)
 
-  -- cascade body
   for _, seg in ipairs(body) do
     local sx, sy = world.get_position(seg)
     world.set_position(seg, prev.x, prev.y)
     prev = {x = sx, y = sy}
   end
 
-  -- read new head pos for collision tests
   local nhx, nhy = world.get_position(head)
 
   -- bounds check
@@ -96,20 +91,15 @@ local function snake_step()
   -- self collision (skip segment 1 = direct follower)
   for i = 2, #body do
     local sx, sy = world.get_position(body[i])
-    if nhx == sx and nhy == sy then
-      reset(); return
-    end
+    if nhx == sx and nhy == sy then reset(); return end
   end
 
   -- food collision
   local fx, fy = world.get_position(food_entity)
   if nhx == fx and nhy == fy then
-    -- grow: new segment off-screen, cascade pulls it in next step
     local seg = make_segment(-CELL, -CELL, 0, 200, 0)
-    world.add_tag(seg, "snake_body")
     table.insert(body, seg)
 
-    -- relocate food
     local all = {head}
     for _, s in ipairs(body) do table.insert(all, s) end
     local nfx, nfy = spawn_food(all)
@@ -117,14 +107,13 @@ local function snake_step()
   end
 end
 
--- ── update callback ──────────────────────────────────────────────────────────
+-- ── update ───────────────────────────────────────────────────────────────────
 
 engine.on_update(function(dt)
-  -- direction input (buffered; 180° reversals rejected)
-  if engine.is_key_pressed("UP")    and not (dir.y ==  1) then next_dir = {x=0,  y=-1} end
-  if engine.is_key_pressed("DOWN")  and not (dir.y == -1) then next_dir = {x=0,  y= 1} end
-  if engine.is_key_pressed("LEFT")  and not (dir.x ==  1) then next_dir = {x=-1, y= 0} end
-  if engine.is_key_pressed("RIGHT") and not (dir.x == -1) then next_dir = {x= 1, y= 0} end
+  if engine.is_key_pressed("UP")    and dir.y ~=  1 then next_dir = {x=0,  y=-1} end
+  if engine.is_key_pressed("DOWN")  and dir.y ~= -1 then next_dir = {x=0,  y= 1} end
+  if engine.is_key_pressed("LEFT")  and dir.x ~=  1 then next_dir = {x=-1, y= 0} end
+  if engine.is_key_pressed("RIGHT") and dir.x ~= -1 then next_dir = {x= 1, y= 0} end
 
   accumulator = accumulator + dt
   while accumulator >= STEP do

@@ -1,81 +1,83 @@
 #include "core/Game.hpp"
 
-#include <SDL3/SDL.h>
-#include <iostream>
+#include "ecs/World.hpp"
+#include "input/InputManager.hpp"
+#include "scripting/ScriptingEngine.hpp"
 
-#if defined(GAME_SCRIPT_BREAKOUT)
-#  include "embedded_breakout.hpp"
-   static constexpr std::string_view kGameSrc   = embedded::breakout;
-   static constexpr std::string_view kGameChunk = "breakout.lua";
-#else
-#  include "embedded_snake.hpp"
-   static constexpr std::string_view kGameSrc   = embedded::snake;
-   static constexpr std::string_view kGameChunk = "snake.lua";
-#endif
+#include <SDL3/SDL.h>
+
+// Embed the selected game script as a C string at compile time.
+#include "game_script.h"
 
 Game::Game() = default;
 Game::~Game() = default;
 
-bool Game::Initialize() {
-  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
-    std::cerr << "[Game] SDL_Init failed: " << SDL_GetError() << '\n';
+bool Game::Init() {
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+    SDL_Log("SDL_Init failed: %s", SDL_GetError());
     return false;
   }
 
-  m_window = SDL_CreateWindow(kTitle.data(), kWidth, kHeight,
-                               SDL_WINDOW_RESIZABLE);
+  m_window.reset(SDL_CreateWindow("2D Engine", 1280, 720, 0));
   if (!m_window) {
-    std::cerr << "[Game] SDL_CreateWindow failed: " << SDL_GetError() << '\n';
+    SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
     return false;
   }
 
-  m_renderer = SDL_CreateRenderer(m_window, nullptr);
+  m_renderer.reset(SDL_CreateRenderer(m_window.get(), nullptr));
   if (!m_renderer) {
-    std::cerr << "[Game] SDL_CreateRenderer failed: " << SDL_GetError() << '\n';
-    SDL_DestroyWindow(m_window);
-    m_window = nullptr;
+    SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
     return false;
   }
 
-  m_world     = std::make_unique<World>();
-  m_input     = std::make_unique<InputManager>();
-  m_scripting = std::make_unique<ScriptingEngine>();
+  m_world        = std::make_unique<World>();
+  m_input        = std::make_unique<InputManager>();
+  m_scripting    = std::make_unique<ScriptingEngine>();
 
   m_scripting->BindWorld(m_world.get());
   m_scripting->BindInput(m_input.get());
 
-  if (!m_scripting->RunString(kGameSrc, kGameChunk)) {
-    std::cerr << "[Game] Failed to run embedded script: " << kGameChunk << '\n';
+  if (!m_scripting->RunString(GAME_SCRIPT_SOURCE, GAME_SCRIPT_NAME)) {
+    SDL_Log("Failed to load game script: %s", GAME_SCRIPT_NAME);
     return false;
   }
 
-  std::cout << "[Game] Initialized OK (" << kWidth << 'x' << kHeight
-            << ") — " << kGameChunk << '\n';
   return true;
 }
 
 void Game::Run() {
-  Uint64 previous   = SDL_GetTicks();
-  float accumulator = 0.0f;
-  bool  running     = true;
+  using namespace std::chrono;
+  auto previous = steady_clock::now();
+  constexpr double kMaxDt = 1.0 / 20.0;  // clamp to 50 ms to avoid spiral of death
 
-  while (running) {
-    const Uint64 current = SDL_GetTicks();
-    const float elapsed  = static_cast<float>(current - previous) / 1000.0f;
-    previous = current;
+  while (m_running) {
+    const auto now     = steady_clock::now();
+    const double dt    = std::min(
+        duration<double>(now - previous).count(), kMaxDt);
+    previous           = now;
 
-    accumulator += (elapsed < 0.25f ? elapsed : 0.25f);
-
-    ProcessEvents(running);
-
-    while (accumulator >= kFixedDt) {
-      Update(kFixedDt);
-      accumulator -= kFixedDt;
+    // 1. Input
+    m_input->BeginFrame();
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+      if (event.type == SDL_EVENT_QUIT) m_running = false;
+      m_input->ProcessEvent(event);
     }
 
-    m_input->EndFrame();  // snapshot current -> previous after all updates
+    // 2. Physics (integrates velocity → position)
+    m_world->Update(static_cast<float>(dt));
 
-    Render();
+    // 3. Lua on_update (may call set_position, destroy entities, etc.)
+    m_scripting->CallOnUpdate(static_cast<float>(dt));
+
+    // 4. Collision detection on fully-committed positions
+    m_world->RunCollision();
+
+    // 5. Render
+    SDL_SetRenderDrawColor(m_renderer.get(), 15, 15, 15, 255);
+    SDL_RenderClear(m_renderer.get());
+    m_world->Render(m_renderer.get());
+    SDL_RenderPresent(m_renderer.get());
   }
 }
 
@@ -83,31 +85,7 @@ void Game::Shutdown() {
   m_scripting.reset();
   m_world.reset();
   m_input.reset();
-
-  if (m_renderer) { SDL_DestroyRenderer(m_renderer); m_renderer = nullptr; }
-  if (m_window)   { SDL_DestroyWindow(m_window);     m_window   = nullptr; }
+  m_renderer.reset();
+  m_window.reset();
   SDL_Quit();
-  std::cout << "[Game] Shutdown complete.\n";
-}
-
-void Game::ProcessEvents(bool &running) {
-  SDL_Event event;
-  while (SDL_PollEvent(&event)) {
-    if (event.type == SDL_EVENT_QUIT) running = false;
-    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)
-      running = false;
-    m_input->ProcessEvent(event);  // feed every event into InputManager
-  }
-}
-
-void Game::Update(float deltaTime) {
-  m_world->Update(deltaTime);
-  m_scripting->CallOnUpdate(deltaTime);
-}
-
-void Game::Render() {
-  SDL_SetRenderDrawColor(m_renderer, 18, 18, 18, 255);
-  SDL_RenderClear(m_renderer);
-  m_world->Render(m_renderer);
-  SDL_RenderPresent(m_renderer);
 }

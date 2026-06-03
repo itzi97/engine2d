@@ -3,9 +3,20 @@
 #include "ecs/systems/PhysicsSystem.hpp"
 #include "ecs/systems/RenderSystem.hpp"
 
+// Update order:
+//   1. PhysicsSystem  -- integrates velocity into position
+//   2. (Lua on_update runs here, via ScriptingEngine::CallOnUpdate in Game::Run)
+//   3. CollisionSystem -- detects overlaps on fully-committed positions
+//
+// CollisionSystem::Update is called by Game::Run AFTER ScriptingEngine::CallOnUpdate
+// so that manual set_position calls in Lua are visible to collision detection.
+// World::Update therefore only runs physics; Game drives the rest of the order.
 void World::Update(float dt) {
   PhysicsSystem::Update(*this, dt);
-  CollisionSystem::Update(*this);  // always run after physics so positions are final
+}
+
+void World::RunCollision() {
+  CollisionSystem::Update(*this);
 }
 
 void World::Render(SDL_Renderer *renderer) {
