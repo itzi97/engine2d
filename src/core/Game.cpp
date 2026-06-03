@@ -1,15 +1,13 @@
 #include "core/Game.hpp"
 
 #include "ecs/World.hpp"
+#include "ecs/systems/TextSystem.hpp"
 #include "input/InputManager.hpp"
+#include "rendering/FontManager.hpp"
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
 
-// game_script_shim.hpp is generated at CMake configure time.
-// It includes the correct embedded_<GAME>.hpp and exposes:
-//   game_script::source  (const char*)
-//   game_script::name    (const char*)
 #include "game_script_shim.hpp"
 
 Game::Game()  = default;
@@ -35,10 +33,12 @@ bool Game::Initialize() {
 
   m_world     = std::make_unique<World>();
   m_input     = std::make_unique<InputManager>();
+  m_fonts     = std::make_unique<FontManager>();
   m_scripting = std::make_unique<ScriptingEngine>();
 
   m_scripting->BindWorld(m_world.get());
   m_scripting->BindInput(m_input.get());
+  m_scripting->BindFonts(m_fonts.get());
 
   if (!m_scripting->RunString(game_script::source, game_script::name)) {
     SDL_Log("Failed to load game script: %s", game_script::name);
@@ -66,6 +66,7 @@ void Game::Render() {
   SDL_SetRenderDrawColor(m_renderer, 15, 15, 15, 255);
   SDL_RenderClear(m_renderer);
   m_world->Render(m_renderer);
+  TextSystem::Render(*m_world, m_renderer, *m_fonts, FONT_PATH);
   SDL_RenderPresent(m_renderer);
 }
 
@@ -81,7 +82,7 @@ void Game::Run() {
         duration<double>(now - previous).count());
     previous = now;
 
-    const float dt = (raw < 0.05f) ? raw : 0.05f;  // clamp: avoid spiral-of-death
+    const float dt = (raw < 0.05f) ? raw : 0.05f;
 
     ProcessEvents(running);
 
@@ -99,6 +100,7 @@ void Game::Run() {
 void Game::Shutdown() {
   m_scripting.reset();
   m_world.reset();
+  m_fonts.reset();
   m_input.reset();
   SDL_DestroyRenderer(m_renderer);
   SDL_DestroyWindow(m_window);

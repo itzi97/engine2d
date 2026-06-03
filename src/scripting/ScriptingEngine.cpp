@@ -10,9 +10,11 @@
 #include "ecs/components/KinematicComponent.hpp"
 #include "ecs/components/SpriteComponent.hpp"
 #include "ecs/components/TagComponent.hpp"
+#include "ecs/components/TextComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
 #include "ecs/systems/CollisionSystem.hpp"
 #include "input/InputManager.hpp"
+#include "rendering/FontManager.hpp"
 
 #include <SDL3/SDL.h>
 #include <iostream>
@@ -42,10 +44,6 @@ struct ScriptingEngine::Impl {
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
                        sol::lib::table, sol::lib::io, sol::lib::os);
-    RegisterBaseBindings();
-  }
-
-  void RegisterBaseBindings() {
     lua.set_function("log", [](const std::string &msg) {
       std::cout << "[Lua] " << msg << '\n';
     });
@@ -54,150 +52,140 @@ struct ScriptingEngine::Impl {
   void BindWorld(World *world) {
     auto w = lua.create_named_table("world");
 
-    w.set_function("create_entity", [world]() -> EntityId {
-      return world->CreateEntity();
-    });
-    w.set_function("destroy_entity", [world](EntityId e) {
-      world->DestroyEntity(e);
-    });
+    w.set_function("create_entity",  [world]() -> EntityId { return world->CreateEntity(); });
+    w.set_function("destroy_entity", [world](EntityId e)   { world->DestroyEntity(e); });
+
     w.set_function("add_transform",
-                   [world](EntityId e, float x, float y, float w_, float h_) {
-                     auto &t    = world->AddComponent<TransformComponent>(e);
-                     t.position = {x, y};
-                     t.size     = {w_, h_};
-                   });
+        [world](EntityId e, float x, float y, float w_, float h_) {
+          auto &t = world->AddComponent<TransformComponent>(e);
+          t.position = {x, y}; t.size = {w_, h_};
+        });
     w.set_function("set_position",
-                   [world](EntityId e, float x, float y) {
-                     if (auto *t = world->GetComponent<TransformComponent>(e))
-                       t->position = {x, y};
-                   });
+        [world](EntityId e, float x, float y) {
+          if (auto *t = world->GetComponent<TransformComponent>(e)) t->position = {x, y};
+        });
     w.set_function("get_position",
-                   [world](EntityId e) -> std::tuple<float, float> {
-                     if (auto *t = world->GetComponent<TransformComponent>(e))
-                       return {t->position.x, t->position.y};
-                     return {0.f, 0.f};
-                   });
-    w.set_function("add_kinematic", [world](EntityId e) {
-      world->AddComponent<KinematicComponent>(e);
-    });
+        [world](EntityId e) -> std::tuple<float,float> {
+          if (auto *t = world->GetComponent<TransformComponent>(e))
+            return {t->position.x, t->position.y};
+          return {0.f, 0.f};
+        });
+
+    w.set_function("add_kinematic", [world](EntityId e) { world->AddComponent<KinematicComponent>(e); });
     w.set_function("set_velocity",
-                   [world](EntityId e, float vx, float vy) {
-                     if (auto *k = world->GetComponent<KinematicComponent>(e))
-                       k->velocity = {vx, vy};
-                   });
+        [world](EntityId e, float vx, float vy) {
+          if (auto *k = world->GetComponent<KinematicComponent>(e)) k->velocity = {vx, vy};
+        });
     w.set_function("get_velocity",
-                   [world](EntityId e) -> std::tuple<float, float> {
-                     if (auto *k = world->GetComponent<KinematicComponent>(e))
-                       return {k->velocity.x, k->velocity.y};
-                     return {0.f, 0.f};
-                   });
+        [world](EntityId e) -> std::tuple<float,float> {
+          if (auto *k = world->GetComponent<KinematicComponent>(e))
+            return {k->velocity.x, k->velocity.y};
+          return {0.f, 0.f};
+        });
     w.set_function("set_acceleration",
-                   [world](EntityId e, float ax, float ay) {
-                     if (auto *k = world->GetComponent<KinematicComponent>(e))
-                       k->acceleration = {ax, ay};
-                   });
+        [world](EntityId e, float ax, float ay) {
+          if (auto *k = world->GetComponent<KinematicComponent>(e)) k->acceleration = {ax, ay};
+        });
+
     // add_sprite(entity, r, g, b, a [, layer=0])
     w.set_function("add_sprite",
-                   [world](EntityId e, int r, int g, int b, int a,
-                           sol::optional<int> layer) {
-                     world->AddComponent<SpriteComponent>(
-                         e,
-                         SDL_Color{static_cast<Uint8>(r), static_cast<Uint8>(g),
-                                   static_cast<Uint8>(b),
-                                   static_cast<Uint8>(a)},
-                         layer.value_or(0));
-                   });
-    // set_layer(entity, layer) -- change draw order after creation
+        [world](EntityId e, int r, int g, int b, int a, sol::optional<int> layer) {
+          world->AddComponent<SpriteComponent>(
+              e,
+              SDL_Color{static_cast<Uint8>(r), static_cast<Uint8>(g),
+                        static_cast<Uint8>(b), static_cast<Uint8>(a)},
+              layer.value_or(0));
+        });
     w.set_function("set_layer",
-                   [world](EntityId e, int layer) {
-                     if (auto *s = world->GetComponent<SpriteComponent>(e))
-                       s->layer = layer;
-                   });
-    w.set_function("add_tag",
-                   [world](EntityId e, const std::string &tag) {
-                     world->AddComponent<TagComponent>(e).tag = tag;
-                   });
-    w.set_function("get_tag", [world](EntityId e) -> std::string {
-      if (auto *t = world->GetComponent<TagComponent>(e)) return t->tag;
-      return "";
-    });
+        [world](EntityId e, int layer) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e)) s->layer = layer;
+        });
 
-    // Collision queries -- valid to call any time inside on_update.
-    // Results reflect positions after PhysicsSystem ran this frame.
+    w.set_function("add_tag",
+        [world](EntityId e, const std::string &tag) {
+          world->AddComponent<TagComponent>(e).tag = tag;
+        });
+    w.set_function("get_tag",
+        [world](EntityId e) -> std::string {
+          if (auto *t = world->GetComponent<TagComponent>(e)) return t->tag;
+          return "";
+        });
+
+    // -- Text -----------------------------------------------------------------
+    // world.add_text(entity, text, fontSize, r, g, b [, layer=10])
+    w.set_function("add_text",
+        [world](EntityId e, const std::string &text, int size,
+                int r, int g, int b, sol::optional<int> layer) {
+          world->AddComponent<TextComponent>(
+              e, text, size,
+              SDL_Color{static_cast<Uint8>(r), static_cast<Uint8>(g),
+                        static_cast<Uint8>(b), 255},
+              layer.value_or(10));
+        });
+    // world.set_text(entity, newText)
+    w.set_function("set_text",
+        [world](EntityId e, const std::string &text) {
+          if (auto *tc = world->GetComponent<TextComponent>(e)) {
+            if (tc->text != text) { tc->text = text; tc->dirty = true; }
+          }
+        });
+    // world.set_text_color(entity, r, g, b, a)
+    w.set_function("set_text_color",
+        [world](EntityId e, int r, int g, int b, int a) {
+          if (auto *tc = world->GetComponent<TextComponent>(e)) {
+            tc->color = {static_cast<Uint8>(r), static_cast<Uint8>(g),
+                         static_cast<Uint8>(b), static_cast<Uint8>(a)};
+            tc->dirty = true;
+          }
+        });
+
+    // -- Collisions -----------------------------------------------------------
     w.set_function("get_collisions_for",
-                   [this, world](EntityId entity) -> sol::table {
-                     (void)world;
-                     auto tbl = lua.create_table();
-                     int  i   = 1;
-                     for (const auto &c : CollisionSystem::GetCollisionsFor(entity)) {
-                       auto row  = lua.create_table();
-                       row["a"] = c.a;
-                       row["b"] = c.b;
-                       tbl[i++] = row;
-                     }
-                     return tbl;
-                   });
+        [this, world](EntityId entity) -> sol::table {
+          (void)world;
+          auto tbl = lua.create_table(); int i = 1;
+          for (const auto &c : CollisionSystem::GetCollisionsFor(entity)) {
+            auto row = lua.create_table();
+            row["a"] = c.a; row["b"] = c.b;
+            tbl[i++] = row;
+          }
+          return tbl;
+        });
     w.set_function("get_collisions_tagged",
-                   [this, world](const std::string &tag) -> sol::table {
-                     auto tbl = lua.create_table();
-                     int  i   = 1;
-                     for (const auto &c : CollisionSystem::GetCollisionsTagged(*world, tag)) {
-                       auto row  = lua.create_table();
-                       row["a"] = c.a;
-                       row["b"] = c.b;
-                       tbl[i++] = row;
-                     }
-                     return tbl;
-                   });
+        [this, world](const std::string &tag) -> sol::table {
+          auto tbl = lua.create_table(); int i = 1;
+          for (const auto &c : CollisionSystem::GetCollisionsTagged(*world, tag)) {
+            auto row = lua.create_table();
+            row["a"] = c.a; row["b"] = c.b;
+            tbl[i++] = row;
+          }
+          return tbl;
+        });
   }
 
   void BindEngine(InputManager *input) {
     auto eng = lua.create_named_table("engine");
-
-    eng.set_function("on_update", [this](sol::function fn) {
-      onUpdateFn = fn;
-    });
+    eng.set_function("on_update", [this](sol::function fn) { onUpdateFn = fn; });
     eng.set_function("is_key_pressed",
-                     [input](const std::string &key) -> bool {
-                       return input->IsKeyPressed(KeycodeFromString(key));
-                     });
+        [input](const std::string &k) { return input->IsKeyPressed(KeycodeFromString(k)); });
     eng.set_function("is_key_just_pressed",
-                     [input](const std::string &key) -> bool {
-                       return input->IsKeyJustPressed(KeycodeFromString(key));
-                     });
+        [input](const std::string &k) { return input->IsKeyJustPressed(KeycodeFromString(k)); });
     eng.set_function("is_key_just_released",
-                     [input](const std::string &key) -> bool {
-                       return input->IsKeyJustReleased(KeycodeFromString(key));
-                     });
-    eng.set_function("is_mouse_pressed",
-                     [input](int btn) -> bool {
-                       return input->IsMousePressed(btn);
-                     });
-    eng.set_function("is_mouse_just_pressed",
-                     [input](int btn) -> bool {
-                       return input->IsMouseJustPressed(btn);
-                     });
-    eng.set_function("is_mouse_just_released",
-                     [input](int btn) -> bool {
-                       return input->IsMouseJustReleased(btn);
-                     });
+        [input](const std::string &k) { return input->IsKeyJustReleased(KeycodeFromString(k)); });
+    eng.set_function("is_mouse_pressed",      [input](int b) { return input->IsMousePressed(b); });
+    eng.set_function("is_mouse_just_pressed",  [input](int b) { return input->IsMouseJustPressed(b); });
+    eng.set_function("is_mouse_just_released", [input](int b) { return input->IsMouseJustReleased(b); });
     eng.set_function("mouse_position",
-                     [input]() -> std::tuple<float, float> {
-                       return {input->MouseX(), input->MouseY()};
-                     });
+        [input]() -> std::tuple<float,float> { return {input->MouseX(), input->MouseY()}; });
   }
 };
 
 ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
 ScriptingEngine::~ScriptingEngine() = default;
 
-void ScriptingEngine::BindWorld(World *world) {
-  m_impl->BindWorld(world);
-}
-
-void ScriptingEngine::BindInput(InputManager *input) {
-  m_impl->BindEngine(input);
-}
+void ScriptingEngine::BindWorld(World *world)        { m_impl->BindWorld(world); }
+void ScriptingEngine::BindInput(InputManager *input) { m_impl->BindEngine(input); }
+void ScriptingEngine::BindFonts(FontManager *)       { /* fonts accessed via FONT_PATH in TextSystem */ }
 
 void ScriptingEngine::CallOnUpdate(float dt) {
   if (m_impl->onUpdateFn.valid()) {
@@ -210,12 +198,10 @@ void ScriptingEngine::CallOnUpdate(float dt) {
 }
 
 bool ScriptingEngine::RunScript(const std::filesystem::path &path) {
-  auto result =
-      m_impl->lua.safe_script_file(path.string(), sol::script_pass_on_error);
+  auto result = m_impl->lua.safe_script_file(path.string(), sol::script_pass_on_error);
   if (!result.valid()) {
-    const sol::error err = result;
-    std::cerr << "[ScriptingEngine] Error in '" << path
-              << "': " << err.what() << '\n';
+    sol::error err = result;
+    std::cerr << "[ScriptingEngine] Error in '" << path << "': " << err.what() << '\n';
     return false;
   }
   return true;
@@ -235,7 +221,7 @@ bool ScriptingEngine::RunString(std::string_view src, std::string_view chunkName
   lua_pop(L, 1);
   auto result = chunk();
   if (!result.valid()) {
-    const sol::error err = result;
+    sol::error err = result;
     std::cerr << "[ScriptingEngine] Runtime error in '" << chunkName
               << "': " << err.what() << '\n';
     return false;

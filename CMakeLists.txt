@@ -9,8 +9,7 @@ include(FetchContent)
 include(cmake/EmbedScript.cmake)
 
 # ---------------------------------------------------------------------------
-# Game selection: cmake -B build -DGAME=snake   (default: snake)
-#                 cmake -B build -DGAME=breakout
+# Game selection
 # ---------------------------------------------------------------------------
 set(GAME "snake" CACHE STRING "Game script to embed (filename without .lua)")
 set_property(CACHE GAME PROPERTY STRINGS snake breakout)
@@ -18,7 +17,6 @@ set_property(CACHE GAME PROPERTY STRINGS snake breakout)
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/scripts/${GAME}.lua")
   message(FATAL_ERROR "Game script not found: scripts/${GAME}.lua")
 endif()
-
 message(STATUS "Building game: ${GAME}")
 
 # -- SDL3 ---------------------------------------------------------------------
@@ -29,6 +27,16 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(SDL3)
+
+# -- SDL3_ttf -----------------------------------------------------------------
+set(SDLTTF_VENDORED TRUE CACHE BOOL "" FORCE)   # use bundled FreeType/HarfBuzz
+FetchContent_Declare(
+    SDL3_ttf
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+    GIT_TAG        release-3.2.2
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(SDL3_ttf)
 
 # -- GLM ----------------------------------------------------------------------
 FetchContent_Declare(
@@ -58,7 +66,6 @@ list(REMOVE_ITEM LUA_SOURCES
 )
 add_library(lua_static STATIC ${LUA_SOURCES})
 target_include_directories(lua_static PUBLIC "${lua_SOURCE_DIR}")
-# Suppress tmpnam deprecation warning that originates in Lua's loslib.c.
 target_compile_options(lua_static PRIVATE -Wno-deprecated-declarations)
 
 # -- Lua shim -----------------------------------------------------------------
@@ -74,7 +81,7 @@ foreach(_hdr lua.h luaconf.h lualib.h lauxlib.h)
     endif()
 endforeach()
 
-# -- sol2 (develop) -----------------------------------------------------------
+# -- sol2 ---------------------------------------------------------------------
 set(SOL2_ENABLE_INSTALL FALSE CACHE BOOL   "" FORCE)
 set(SOL2_LUA_VERSION   "5.4"  CACHE STRING "" FORCE)
 set(SOL2_BUILD_LUA     FALSE  CACHE BOOL   "" FORCE)
@@ -87,11 +94,7 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(sol2)
-
-target_include_directories(sol2 INTERFACE
-    "${LUA_SHIM_DIR}"
-    "${lua_SOURCE_DIR}"
-)
+target_include_directories(sol2 INTERFACE "${LUA_SHIM_DIR}" "${lua_SOURCE_DIR}")
 
 # -- nlohmann/json ------------------------------------------------------------
 FetchContent_Declare(
@@ -102,11 +105,23 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# -- DejaVu Sans font (MIT-compatible, no build dep) -------------------------
+set(FONT_DIR "${CMAKE_SOURCE_DIR}/assets/fonts")
+set(FONT_FILE "${FONT_DIR}/DejaVuSans.ttf")
+if(NOT EXISTS "${FONT_FILE}")
+  message(STATUS "Downloading DejaVuSans.ttf...")
+  file(MAKE_DIRECTORY "${FONT_DIR}")
+  file(DOWNLOAD
+    "https://github.com/dejavu-fonts/dejavu-fonts/raw/version_2_37/ttf/DejaVuSans.ttf"
+    "${FONT_FILE}"
+    EXPECTED_HASH SHA256=7b8028f8a2b6f97b3c0cf3ebdab52ac63ae40e9a38c8e23bab037f09e0c01cf6
+    TLS_VERIFY ON
+  )
+endif()
+
 # -- Embed selected game script -----------------------------------------------
 embed_script(${GAME} scripts/${GAME}.lua)
 
-# Generate game_script_shim.hpp at configure time so Game.cpp can include it
-# without any preprocessor tricks. Re-runs if GAME changes.
 set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${GENERATED_DIR}")
 execute_process(
@@ -126,7 +141,9 @@ set(ENGINE_SOURCES
     src/ecs/systems/CollisionSystem.cpp
     src/ecs/systems/PhysicsSystem.cpp
     src/ecs/systems/RenderSystem.cpp
+    src/ecs/systems/TextSystem.cpp
     src/input/InputManager.cpp
+    src/rendering/FontManager.cpp
     src/scripting/ScriptingEngine.cpp
 )
 
@@ -140,8 +157,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${lua_SOURCE_DIR}"
 )
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    FONT_PATH="${FONT_DIR}/DejaVuSans.ttf"
+)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
+    SDL3_ttf::SDL3_ttf
     glm::glm
     nlohmann_json::nlohmann_json
     sol2
