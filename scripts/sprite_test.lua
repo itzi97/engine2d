@@ -2,16 +2,20 @@
 -- Tests engine.load_texture, world.set_sprite_texture, set_sprite_src,
 -- set_sprite_flip. Uses the bundled simpleSpace_sheet.png atlas.
 --
--- Build with: cmake -DGAME=sprite_test ...
+-- Build with: cmake -B build -DGAME=sprite_test && cmake --build build -j
+-- Run from repo root: ./build/2d-engine
 
 local SHEET = "assets/sprites/simpleSpace_sheet.png"
 
--- Atlas coords for a couple of sprites inside simpleSpace_sheet
--- (all values in pixels, verified against simpleSpace_sheet.xml)
+-- Coords taken directly from simpleSpace_sheet.xml
 local SPR = {
-  ship    = { x =   0, y =   0, w = 99, h = 75 },
-  enemy   = { x =   0, y = 144, w = 82, h = 84 },
-  laser   = { x = 843, y =   0, w = 13, h = 57 },
+  ship_D   = { x =  64, y =   0, w = 48, h = 32 },  -- small fighter
+  ship_G   = { x =  60, y =  32, w = 48, h = 48 },  -- medium fighter
+  ship_F   = { x =  96, y = 388, w = 48, h = 48 },  -- large fighter
+  enemy_A  = { x =   0, y = 420, w = 48, h = 48 },  -- enemy saucer
+  enemy_B  = { x = 100, y = 140, w = 48, h = 48 },  -- enemy wedge
+  meteor   = { x = 144, y = 380, w = 48, h = 48 },  -- round meteor
+  star     = { x =  52, y = 196, w = 48, h = 48 },  -- large star
 }
 
 local tex
@@ -32,27 +36,25 @@ local function load_scene()
   end
   log("[sprite_test] texture loaded OK")
 
-  -- Row 1: player ship, normal + H-flipped + V-flipped
-  make_sprite( 50,  80, 99, 75, SPR.ship)
+  -- Row 1: three different ships
+  make_sprite( 50,  50, 96, 64, SPR.ship_D)
+  make_sprite(200,  50, 96, 96, SPR.ship_G)
+  make_sprite(350,  50, 96, 96, SPR.ship_F)
 
-  local ship_flip_h = make_sprite(200,  80, 99, 75, SPR.ship)
-  world.set_sprite_flip(ship_flip_h, true, false)
+  -- Row 2: enemies, normal + H-flipped
+  local eA = make_sprite( 50, 200, 96, 96, SPR.enemy_A)
+  local eB = make_sprite(200, 200, 96, 96, SPR.enemy_B)
+  world.set_sprite_flip(eB, true, false)
 
-  local ship_flip_v = make_sprite(350,  80, 99, 75, SPR.ship)
-  world.set_sprite_flip(ship_flip_v, false, true)
+  -- Row 3: meteor + star (non-character sprites)
+  make_sprite( 50, 360, 96, 96, SPR.meteor)
+  make_sprite(200, 360, 96, 96, SPR.star)
 
-  -- Row 2: enemy, normal + both axes flipped
-  make_sprite( 50, 220, 82, 84, SPR.enemy)
+  -- One ship flipped vertically to test that axis
+  local ship_vflip = make_sprite(350, 200, 96, 96, SPR.ship_G)
+  world.set_sprite_flip(ship_vflip, false, true)
 
-  local enemy_flip = make_sprite(200, 220, 82, 84, SPR.enemy)
-  world.set_sprite_flip(enemy_flip, true, true)
-
-  -- Row 3: laser (tall thin sprite — tests non-square src rects)
-  make_sprite( 50, 380, 13, 57, SPR.laser)
-  make_sprite(100, 380, 13, 57, SPR.laser)
-  make_sprite(150, 380, 13, 57, SPR.laser)
-
-  log("[sprite_test] scene ready")
+  log("[sprite_test] scene ready: 8 sprites, 3 rows")
 end
 
 load_scene()
