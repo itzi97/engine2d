@@ -6,27 +6,28 @@
 
 #include <SDL3/SDL.h>
 
-// game_script_shim.hpp is generated at CMake configure time by
-// cmake/GenerateGameShim.cmake. It includes the correct embedded_<GAME>.hpp
-// and exposes game_script::source and game_script::name.
+// game_script_shim.hpp is generated at CMake configure time.
+// It includes the correct embedded_<GAME>.hpp and exposes:
+//   game_script::source  (const char*)
+//   game_script::name    (const char*)
 #include "game_script_shim.hpp"
 
-Game::Game() = default;
+Game::Game()  = default;
 Game::~Game() = default;
 
-bool Game::Init() {
+bool Game::Initialize() {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
     SDL_Log("SDL_Init failed: %s", SDL_GetError());
     return false;
   }
 
-  m_window.reset(SDL_CreateWindow("2D Engine", 1280, 720, 0));
+  m_window = SDL_CreateWindow(kTitle.data(), kWidth, kHeight, 0);
   if (!m_window) {
     SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
     return false;
   }
 
-  m_renderer.reset(SDL_CreateRenderer(m_window.get(), nullptr));
+  m_renderer = SDL_CreateRenderer(m_window, nullptr);
   if (!m_renderer) {
     SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
     return false;
@@ -47,38 +48,51 @@ bool Game::Init() {
   return true;
 }
 
+void Game::ProcessEvents(bool &running) {
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    if (event.type == SDL_EVENT_QUIT) running = false;
+    m_input->ProcessEvent(event);
+  }
+}
+
+void Game::Update(float dt) {
+  m_world->Update(dt);
+  m_scripting->CallOnUpdate(dt);
+  m_world->RunCollision();
+}
+
+void Game::Render() {
+  SDL_SetRenderDrawColor(m_renderer, 15, 15, 15, 255);
+  SDL_RenderClear(m_renderer);
+  m_world->Render(m_renderer);
+  SDL_RenderPresent(m_renderer);
+}
+
 void Game::Run() {
   using namespace std::chrono;
-  auto previous = steady_clock::now();
-  constexpr double kMaxDt = 1.0 / 20.0;
+  auto  previous    = steady_clock::now();
+  bool  running     = true;
+  float accumulator = 0.f;
 
-  while (m_running) {
-    const auto   now = steady_clock::now();
-    const double dt  = std::min(duration<double>(now - previous).count(), kMaxDt);
-    previous         = now;
+  while (running) {
+    const auto  now = steady_clock::now();
+    const float raw = static_cast<float>(
+        duration<double>(now - previous).count());
+    previous = now;
 
-    // 1. Input
-    m_input->BeginFrame();
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_EVENT_QUIT) m_running = false;
-      m_input->ProcessEvent(event);
+    const float dt = (raw < 0.05f) ? raw : 0.05f;  // clamp: avoid spiral-of-death
+
+    ProcessEvents(running);
+
+    accumulator += dt;
+    while (accumulator >= kFixedDt) {
+      Update(kFixedDt);
+      accumulator -= kFixedDt;
     }
 
-    // 2. Physics (integrates velocity → position)
-    m_world->Update(static_cast<float>(dt));
-
-    // 3. Lua on_update (may call set_position, destroy entities, etc.)
-    m_scripting->CallOnUpdate(static_cast<float>(dt));
-
-    // 4. Collision detection on fully-committed positions
-    m_world->RunCollision();
-
-    // 5. Render
-    SDL_SetRenderDrawColor(m_renderer.get(), 15, 15, 15, 255);
-    SDL_RenderClear(m_renderer.get());
-    m_world->Render(m_renderer.get());
-    SDL_RenderPresent(m_renderer.get());
+    m_input->EndFrame();
+    Render();
   }
 }
 
@@ -86,7 +100,9 @@ void Game::Shutdown() {
   m_scripting.reset();
   m_world.reset();
   m_input.reset();
-  m_renderer.reset();
-  m_window.reset();
+  SDL_DestroyRenderer(m_renderer);
+  SDL_DestroyWindow(m_window);
+  m_renderer = nullptr;
+  m_window   = nullptr;
   SDL_Quit();
 }
