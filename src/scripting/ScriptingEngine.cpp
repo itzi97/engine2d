@@ -98,7 +98,7 @@ struct ScriptingEngine::Impl {
     w.set_function("add_sprite",
                    [world](EntityId e, int r, int g, int b, int a) {
                      world->AddComponent<SpriteComponent>(
-                         e, e,
+                         e,
                          SDL_Color{static_cast<Uint8>(r), static_cast<Uint8>(g),
                                    static_cast<Uint8>(b),
                                    static_cast<Uint8>(a)});
