@@ -1,9 +1,6 @@
 #include "ecs/systems/CollisionSystem.hpp"
 #include "ecs/World.hpp"
-#include "ecs/components/TagComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
-
-std::vector<Collision> CollisionSystem::s_collisions;
 
 static bool Overlaps(const TransformComponent &a, const TransformComponent &b) {
   const float aw = a.size.x * a.scale.x;
@@ -17,39 +14,11 @@ static bool Overlaps(const TransformComponent &a, const TransformComponent &b) {
 }
 
 void CollisionSystem::Update(World &world) {
-  s_collisions.clear();
-
-  // View<T> gives a read-only span pair over the packed arrays —
-  // O(n^2) index loop without exposing raw storage.
+  world.ClearCollisions();
   const auto view = world.View<TransformComponent>();
   const size_t n  = view.size();
-
   for (size_t i = 0; i < n; ++i)
     for (size_t j = i + 1; j < n; ++j)
       if (Overlaps(view.components[i], view.components[j]))
-        s_collisions.push_back({view.entities[i], view.entities[j]});
-}
-
-const std::vector<Collision> &CollisionSystem::GetCollisions() {
-  return s_collisions;
-}
-
-std::vector<Collision> CollisionSystem::GetCollisionsFor(EntityId entity) {
-  std::vector<Collision> result;
-  for (const auto &c : s_collisions)
-    if (c.a == entity || c.b == entity)
-      result.push_back(c);
-  return result;
-}
-
-std::vector<Collision> CollisionSystem::GetCollisionsTagged(World &world,
-                                                             const std::string &tag) {
-  std::vector<Collision> result;
-  for (const auto &c : s_collisions) {
-    auto *ta = world.GetComponent<TagComponent>(c.a);
-    auto *tb = world.GetComponent<TagComponent>(c.b);
-    if ((ta && ta->tag == tag) || (tb && tb->tag == tag))
-      result.push_back(c);
-  }
-  return result;
+        world.AddCollision({view.entities[i], view.entities[j]});
 }

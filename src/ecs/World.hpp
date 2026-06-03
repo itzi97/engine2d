@@ -12,11 +12,20 @@
 #include <numeric>
 #include <queue>
 #include <span>
+#include <string>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
 
 #include <SDL3/SDL.h>
+
+// ---------------------------------------------------------------------------
+// Collision result (defined here so World can own them)
+// ---------------------------------------------------------------------------
+struct Collision {
+  EntityId a;
+  EntityId b;
+};
 
 // ---------------------------------------------------------------------------
 // Type-erased storage interface
@@ -86,7 +95,7 @@ template <ComponentType T>
 struct ComponentView {
   std::span<const T>        components;
   std::span<const EntityId> entities;
-  [[nodiscard]] size_t size() const noexcept { return entities.size(); }
+  [[nodiscard]] size_t size()  const noexcept { return entities.size(); }
   [[nodiscard]] bool   empty() const noexcept { return entities.empty(); }
 };
 
@@ -112,14 +121,10 @@ public:
     return Entity::Create();
   }
 
-  // Safe to call at any time, including from Lua on_update.
-  // Actual erasure is deferred until FlushDestroyQueue().
   void DestroyEntity(EntityId entity) {
     m_pendingDestroy.push_back(entity);
   }
 
-  // Flush all pending DestroyEntity calls.
-  // Called by Game::Run after Update + CallOnUpdate + RunCollision.
   void FlushDestroyQueue() {
     for (const EntityId e : m_pendingDestroy) {
       for (auto &[type, storage] : m_storages)
@@ -152,8 +157,6 @@ public:
 
   // ---- Iteration ----------------------------------------------------------
 
-  // Iterate all entities that have component T.
-  // Safe to call DestroyEntity inside fn (destruction is deferred).
   template <ComponentType T, typename Fn>
   void ForEach(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -161,10 +164,6 @@ public:
     static_cast<PackedStorage<T> *>(it->second.get())->ForEach(std::forward<Fn>(fn));
   }
 
-  // Iterate all entities that have component T, visited in ascending order
-  // of T::layer. Allocates a temporary index vector per call; use for render
-  // passes only, not hot simulation loops.
-  // Fn signature: void(EntityId, T &)
   template <ComponentType T, typename Fn>
   void ForEachSorted(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -172,7 +171,6 @@ public:
     auto *storage = static_cast<PackedStorage<T> *>(it->second.get());
     const size_t n = storage->entities.size();
     if (n == 0) return;
-
     std::vector<size_t> order(n);
     std::iota(order.begin(), order.end(), 0);
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
@@ -182,9 +180,6 @@ public:
       fn(storage->entities[i], storage->components[i]);
   }
 
-  // Return a read-only view (span pair) over T's packed arrays.
-  // Intended for systems that need direct index access (e.g. O(n^2) collision).
-  // The spans are invalidated by any AddComponent<T> or FlushDestroyQueue call.
   template <ComponentType T>
   [[nodiscard]] ComponentView<T> View() {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -194,15 +189,45 @@ public:
              std::span<const EntityId>{s->entities} };
   }
 
-  // ---- Frame entry points (called by Game::Run) ---------------------------
-  void Update(float deltaTime);   // physics only
-  void RunCollision();            // AABB detection on final positions
+  // ---- Collision results (written by CollisionSystem::Update) -------------
+
+  void ClearCollisions() { m_collisions.clear(); }
+  void AddCollision(Collision c) { m_collisions.push_back(c); }
+
+  [[nodiscard]] const std::vector<Collision> &GetCollisions() const {
+    return m_collisions;
+  }
+
+  [[nodiscard]] std::vector<Collision> GetCollisionsFor(EntityId entity) const {
+    std::vector<Collision> result;
+    for (const auto &c : m_collisions)
+      if (c.a == entity || c.b == entity)
+        result.push_back(c);
+    return result;
+  }
+
+  [[nodiscard]] std::vector<Collision>
+  GetCollisionsTagged(const std::string &tag) const {
+    std::vector<Collision> result;
+    for (const auto &c : m_collisions) {
+      const auto *ta = const_cast<World *>(this)->GetComponent<TagComponent>(c.a);
+      const auto *tb = const_cast<World *>(this)->GetComponent<TagComponent>(c.b);
+      if ((ta && ta->tag == tag) || (tb && tb->tag == tag))
+        result.push_back(c);
+    }
+    return result;
+  }
+
+  // ---- Frame entry points -------------------------------------------------
+  void Update(float deltaTime);
+  void RunCollision();
   void Render(SDL_Renderer *renderer);
 
 private:
   std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_storages;
   std::queue<EntityId>  m_freeList;
   std::vector<EntityId> m_pendingDestroy;
+  std::vector<Collision> m_collisions;
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {
@@ -215,6 +240,4 @@ private:
     m_storages.emplace(key, std::move(storage));
     return *ptr;
   }
-  // No friend declarations needed: all system access goes through
-  // ForEach, ForEachSorted, View, GetComponent, AddComponent.
 };

@@ -12,7 +12,6 @@
 #include "ecs/components/TagComponent.hpp"
 #include "ecs/components/TextComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
-#include "ecs/systems/CollisionSystem.hpp"
 #include "input/InputManager.hpp"
 #include "rendering/FontManager.hpp"
 
@@ -87,7 +86,6 @@ struct ScriptingEngine::Impl {
           if (auto *k = world->GetComponent<KinematicComponent>(e)) k->acceleration = {ax, ay};
         });
 
-    // add_sprite(entity, r, g, b, a [, layer=0])
     w.set_function("add_sprite",
         [world](EntityId e, int r, int g, int b, int a, sol::optional<int> layer) {
           world->AddComponent<SpriteComponent>(
@@ -111,8 +109,6 @@ struct ScriptingEngine::Impl {
           return "";
         });
 
-    // -- Text -----------------------------------------------------------------
-    // world.add_text(entity, text, fontSize, r, g, b [, layer=10])
     w.set_function("add_text",
         [world](EntityId e, const std::string &text, int size,
                 int r, int g, int b, sol::optional<int> layer) {
@@ -122,14 +118,12 @@ struct ScriptingEngine::Impl {
                         static_cast<Uint8>(b), 255},
               layer.value_or(10));
         });
-    // world.set_text(entity, newText)
     w.set_function("set_text",
         [world](EntityId e, const std::string &text) {
           if (auto *tc = world->GetComponent<TextComponent>(e)) {
             if (tc->text != text) { tc->text = text; tc->dirty = true; }
           }
         });
-    // world.set_text_color(entity, r, g, b, a)
     w.set_function("set_text_color",
         [world](EntityId e, int r, int g, int b, int a) {
           if (auto *tc = world->GetComponent<TextComponent>(e)) {
@@ -139,12 +133,11 @@ struct ScriptingEngine::Impl {
           }
         });
 
-    // -- Collisions -----------------------------------------------------------
+    // Collision queries delegate to World -- CollisionSystem is now stateless.
     w.set_function("get_collisions_for",
         [this, world](EntityId entity) -> sol::table {
-          (void)world;
           auto tbl = lua.create_table(); int i = 1;
-          for (const auto &c : CollisionSystem::GetCollisionsFor(entity)) {
+          for (const auto &c : world->GetCollisionsFor(entity)) {
             auto row = lua.create_table();
             row["a"] = c.a; row["b"] = c.b;
             tbl[i++] = row;
@@ -154,7 +147,7 @@ struct ScriptingEngine::Impl {
     w.set_function("get_collisions_tagged",
         [this, world](const std::string &tag) -> sol::table {
           auto tbl = lua.create_table(); int i = 1;
-          for (const auto &c : CollisionSystem::GetCollisionsTagged(*world, tag)) {
+          for (const auto &c : world->GetCollisionsTagged(tag)) {
             auto row = lua.create_table();
             row["a"] = c.a; row["b"] = c.b;
             tbl[i++] = row;
