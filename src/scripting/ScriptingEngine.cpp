@@ -154,8 +154,11 @@ bool ScriptingEngine::RunScript(const std::filesystem::path &path) {
 }
 
 bool ScriptingEngine::RunString(std::string_view src, std::string_view chunkName) {
+  // sol2 safe_script expects const std::string& for the chunk name,
+  // and sol::string_view (which is std::string_view) for the source --
+  // but the error-handler overload requires an explicit std::string chunk name.
   auto result = m_impl->lua.safe_script(
-      src, chunkName, sol::script_pass_on_error);
+      std::string(src), std::string(chunkName), sol::script_pass_on_error);
   if (!result.valid()) {
     const sol::error err = result;
     std::cerr << "[ScriptingEngine] Error in '" << chunkName
