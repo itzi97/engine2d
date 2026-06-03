@@ -1,8 +1,8 @@
 -- audio_test.lua
 -- Tests the full audio API:
 --   SPACE      -> play laser SFX
---   E          -> play explosion SFX
---   M          -> toggle music pause/resume
+--   F          -> play explosion SFX
+--   P          -> toggle music pause/resume
 --   UP/DOWN    -> music volume +/-
 --   ESCAPE     -> quit
 
@@ -32,8 +32,8 @@ local function make_label(text, y)
 end
 
 make_label("SPACE       play laser SFX",      30)
-make_label("E           play explosion SFX",  55)
-make_label("M           pause / resume music",80)
+make_label("F           play explosion SFX",  55)
+make_label("P           pause / resume music",80)
 make_label("UP / DOWN   music volume +/-",   105)
 make_label("ESCAPE      quit",               130)
 
