@@ -2,6 +2,7 @@
 
 #include "ecs/Component.hpp"
 #include "ecs/Entity.hpp"
+#include "ecs/components/KinematicComponent.hpp"
 
 #include <memory>
 #include <typeindex>
