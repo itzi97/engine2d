@@ -4,6 +4,7 @@
 // --------------------------------------------------------------------------
 
 #include "scripting/ScriptingEngine.hpp"
+#include "scripting/RawBinding.hpp"
 
 #include "ecs/World.hpp"
 #include "ecs/Entity.hpp"
@@ -37,20 +38,6 @@ static SDL_Keycode KeycodeFromString(const std::string &key) {
   if (key == "F")      return SDLK_F;
   return SDLK_UNKNOWN;
 }
-
-// ---------------------------------------------------------------------------
-static void SetRawFunction(lua_State *L, const char *table,
-                           const char *field,
-                           lua_CFunction fn,
-                           void *upvalue) {
-  lua_pushlightuserdata(L, upvalue);
-  lua_pushcclosure(L, fn, 1);
-  lua_getglobal(L, table);
-  lua_insert(L, -2);
-  lua_setfield(L, -2, field);
-  lua_pop(L, 1);
-}
-// ---------------------------------------------------------------------------
 
 struct ScriptingEngine::Impl {
   sol::state    lua;
@@ -128,9 +115,11 @@ struct ScriptingEngine::Impl {
         });
 
     // -- Texture API ----------------------------------------------------------
+    // set_sprite_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
+    // See scripting/RawBinding.hpp for the full explanation.
     {
       lua_State *L = lua.lua_state();
-      SetRawFunction(L, "world", "set_sprite_texture",
+      RegisterRaw(L, "world", "set_sprite_texture",
         [](lua_State *L_) -> int {
           auto *world_ = static_cast<World *>(lua_touserdata(L_, lua_upvalueindex(1)));
           auto  e      = static_cast<EntityId>(luaL_checkinteger(L_, 1));
@@ -163,10 +152,6 @@ struct ScriptingEngine::Impl {
             s->flip = static_cast<SDL_FlipMode>(f);
           }
         });
-
-    // world.set_sprite_tint(e, r, g, b [, a])
-    // r,g,b,a in 0-255. Alpha defaults to 255 (fully opaque).
-    // Pass 255,255,255,255 to clear the tint back to identity.
     w.set_function("set_sprite_tint",
         [world](EntityId e, int r, int g, int b, sol::optional<int> a) {
           if (auto *s = world->GetComponent<SpriteComponent>(e))
@@ -186,7 +171,7 @@ struct ScriptingEngine::Impl {
           anim.frames.reserve(frames.size());
           for (std::size_t i = 1; i <= frames.size(); ++i) {
             sol::table f = frames[i];
-            anim.frames.push_back(SDL_FRect{
+            anim.frames.push_back(Frame{
               f.get_or("x", 0.f),
               f.get_or("y", 0.f),
               f.get_or("w", 0.f),
@@ -194,8 +179,10 @@ struct ScriptingEngine::Impl {
             });
           }
           if (!anim.frames.empty())
-            if (auto *s = world->GetComponent<SpriteComponent>(e))
-              s->srcRect = anim.frames[0];
+            if (auto *s = world->GetComponent<SpriteComponent>(e)) {
+              const Frame &f0 = anim.frames[0];
+              s->srcRect = {f0.x, f0.y, f0.w, f0.h};
+            }
         });
 
     w.set_function("set_animation_playing",
@@ -211,7 +198,10 @@ struct ScriptingEngine::Impl {
             a->timer = 0.f;
             a->playing = true;
             if (auto *s = world->GetComponent<SpriteComponent>(e))
-              if (!a->frames.empty()) s->srcRect = a->frames[0];
+              if (!a->frames.empty()) {
+                const Frame &f0 = a->frames[0];
+                s->srcRect = {f0.x, f0.y, f0.w, f0.h};
+              }
           }
         });
     // -------------------------------------------------------------------------
@@ -301,8 +291,10 @@ struct ScriptingEngine::Impl {
   }
 
   void BindTextures(TextureManager *textures) {
+    // load_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
+    // See scripting/RawBinding.hpp for the full explanation.
     lua_State *L = lua.lua_state();
-    SetRawFunction(L, "engine", "load_texture",
+    RegisterRaw(L, "engine", "load_texture",
       [](lua_State *L_) -> int {
         auto *mgr = static_cast<TextureManager *>(lua_touserdata(L_, lua_upvalueindex(1)));
         const char *path = luaL_checkstring(L_, 1);

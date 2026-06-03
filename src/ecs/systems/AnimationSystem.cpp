@@ -18,8 +18,11 @@ void AnimationSystem::Update(World &world, float dt) {
       }
     }
 
-    // Write current frame rect into SpriteComponent so RenderSystem picks it up.
-    if (auto *spr = world.GetComponent<SpriteComponent>(e))
-      spr->srcRect = anim.frames[static_cast<std::size_t>(anim.currentFrame)];
+    // Convert Frame -> SDL_FRect here (renderer boundary), keeping
+    // AnimationComponent itself free of SDL types.
+    if (auto *spr = world.GetComponent<SpriteComponent>(e)) {
+      const Frame &f = anim.frames[static_cast<std::size_t>(anim.currentFrame)];
+      spr->srcRect = {f.x, f.y, f.w, f.h};
+    }
   });
 }
