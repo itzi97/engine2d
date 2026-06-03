@@ -17,17 +17,22 @@
 
 bool AudioManager::LoadOgg(const std::string &path, AudioClip &out) {
   int channels = 0, sampleRate = 0;
-  float *decoded = nullptr;
+  short *decoded = nullptr;  // stb_vorbis returns interleaved s16
   const int frames = stb_vorbis_decode_filename(
       path.c_str(), &channels, &sampleRate, &decoded);
   if (frames <= 0 || !decoded) {
     std::cerr << "[AudioManager] stb_vorbis failed: '" << path << "'\n";
     return false;
   }
+
+  // Convert interleaved s16 -> float32 in [-1, 1]
   const size_t total = static_cast<size_t>(frames * channels);
-  out.samples.assign(decoded, decoded + total);
-  out.channels    = channels;
-  out.sampleRate  = sampleRate;
+  out.samples.resize(total);
+  for (size_t i = 0; i < total; ++i)
+    out.samples[i] = static_cast<float>(decoded[i]) / 32768.f;
+
+  out.channels   = channels;
+  out.sampleRate = sampleRate;
   free(decoded);
   return true;
 }
@@ -59,7 +64,6 @@ bool AudioManager::LoadWav(const std::string &path, AudioClip &out) {
 }
 
 bool AudioManager::LoadClip(const std::string &path, AudioClip &out) {
-  // Dispatch by extension
   const auto dot = path.rfind('.');
   if (dot != std::string::npos) {
     std::string ext = path.substr(dot + 1);
@@ -67,7 +71,6 @@ bool AudioManager::LoadClip(const std::string &path, AudioClip &out) {
     if (ext == "ogg") return LoadOgg(path, out);
     if (ext == "wav") return LoadWav(path, out);
   }
-  // Fallback: try WAV then OGG
   return LoadWav(path, out) || LoadOgg(path, out);
 }
 
@@ -76,7 +79,6 @@ bool AudioManager::LoadClip(const std::string &path, AudioClip &out) {
 // ---------------------------------------------------------------------------
 
 AudioManager::AudioManager() {
-  // Open the default playback device with float32 stereo at 44100 Hz.
   m_spec = {SDL_AUDIO_F32, 2, 44100};
   m_deviceId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &m_spec);
   if (m_deviceId == 0) {
@@ -118,7 +120,6 @@ void AudioManager::PlaySfx(int handle, float volume) {
   SDL_AudioStream *stream = SDL_CreateAudioStream(&src, &m_spec);
   if (!stream) return;
 
-  // Apply volume by scaling samples into a temp buffer
   std::vector<float> buf = clip.samples;
   const float v = std::clamp(volume, 0.f, 1.f);
   for (auto &s : buf) s *= v;
@@ -127,8 +128,7 @@ void AudioManager::PlaySfx(int handle, float volume) {
       static_cast<int>(buf.size() * sizeof(float)));
   SDL_FlushAudioStream(stream);
   SDL_BindAudioStream(m_deviceId, stream);
-  // SDL takes ownership and will free after playback drains
-  SDL_SetAudioStreamPutCallback(stream, [](void *ud, SDL_AudioStream *s, int, int avail) {
+  SDL_SetAudioStreamPutCallback(stream, [](void * /*ud*/, SDL_AudioStream *s, int, int avail) {
     if (avail == 0) {
       SDL_UnbindAudioStream(s);
       SDL_DestroyAudioStream(s);
@@ -158,13 +158,12 @@ void AudioManager::FeedMusic(SDL_AudioStream *stream, int additionalAmount) {
   const auto it = m_musicClips.find(m_currentMusic);
   if (it == m_musicClips.end()) return;
 
-  const AudioClip &clip    = it->second;
-  const size_t    total    = clip.samples.size();
+  const AudioClip &clip     = it->second;
+  const size_t    total     = clip.samples.size();
   int             remaining = additionalAmount;
 
   while (remaining > 0) {
-    const size_t floatsNeeded =
-        static_cast<size_t>(remaining) / sizeof(float);
+    const size_t floatsNeeded = static_cast<size_t>(remaining) / sizeof(float);
     const size_t floatsAvail  = total - m_musicPos;
 
     if (floatsAvail == 0) {
@@ -175,7 +174,6 @@ void AudioManager::FeedMusic(SDL_AudioStream *stream, int additionalAmount) {
 
     const size_t chunk = std::min(floatsNeeded, floatsAvail);
 
-    // Apply volume
     std::vector<float> buf(chunk);
     for (size_t i = 0; i < chunk; ++i)
       buf[i] = clip.samples[m_musicPos + i] * m_musicVolume;
