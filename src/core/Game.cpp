@@ -60,6 +60,8 @@ void Game::Update(float dt) {
   m_world->Update(dt);
   m_scripting->CallOnUpdate(dt);
   m_world->RunCollision();
+  // Flush after all systems have finished iterating — safe erasure point.
+  m_world->FlushDestroyQueue();
 }
 
 void Game::Render() {

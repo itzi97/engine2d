@@ -24,14 +24,21 @@ struct IComponentStorage {
 };
 
 // ---------------------------------------------------------------------------
-// PackedStorage<T>
+// PackedStorage<T>  --  swap-and-pop flat array, O(1) erase
 // ---------------------------------------------------------------------------
 template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
   template <typename Fn>
   void ForEach(Fn &&fn) {
-    for (size_t i = 0; i < entities.size(); ++i)
-      fn(entities[i], components[i]);
+    // Iterate by index so in-loop Erase via swap-and-pop is safe:
+    // we re-visit the swapped element by not advancing past it.
+    for (size_t i = 0; i < entities.size(); ) {
+      const EntityId e = entities[i];
+      fn(e, components[i]);
+      // Advance only if fn didn't erase this slot (entity still at slot i).
+      if (i < entities.size() && entities[i] == e)
+        ++i;
+    }
   }
 
   template <typename Fn>
@@ -71,7 +78,8 @@ struct PackedStorage final : IComponentStorage {
     index.erase(entity);
   }
 
-  // Raw arrays — only use when ForEach is insufficient (e.g. two-storage joins).
+  // Direct array access — for systems that need two-storage joins.
+  // Prefer ForEach for single-storage iteration.
   std::vector<T>                       components;
   std::vector<EntityId>                entities;
   std::unordered_map<EntityId, size_t> index;
@@ -88,6 +96,8 @@ public:
   World(const World &)            = delete;
   World &operator=(const World &) = delete;
 
+  // ---- Entity lifetime ----------------------------------------------------
+
   [[nodiscard]] EntityId CreateEntity() {
     if (!m_freeList.empty()) {
       const EntityId id = m_freeList.front();
@@ -97,11 +107,25 @@ public:
     return Entity::Create();
   }
 
+  // Safe to call at any time, including from Lua on_update.
+  // Actual erasure is deferred until FlushDestroyQueue().
   void DestroyEntity(EntityId entity) {
-    for (auto &[type, storage] : m_storages)
-      storage->Erase(entity);
-    m_freeList.push(entity);
+    m_pendingDestroy.push_back(entity);
   }
+
+  // Flush all pending DestroyEntity calls.
+  // Called by Game::Run after Update + CallOnUpdate + RunCollision,
+  // so no system is iterating storage when erasure happens.
+  void FlushDestroyQueue() {
+    for (const EntityId e : m_pendingDestroy) {
+      for (auto &[type, storage] : m_storages)
+        storage->Erase(e);
+      m_freeList.push(e);
+    }
+    m_pendingDestroy.clear();
+  }
+
+  // ---- Component access ---------------------------------------------------
 
   template <ComponentType T, typename... Args>
   T &AddComponent(EntityId entity, Args &&...args) {
@@ -122,6 +146,8 @@ public:
     it->second->Erase(entity);
   }
 
+  // Iterate all entities that have component T.
+  // Safe to call DestroyEntity inside fn — destruction is deferred.
   template <ComponentType T, typename Fn>
   void ForEach(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -129,21 +155,15 @@ public:
     static_cast<PackedStorage<T> *>(it->second.get())->ForEach(std::forward<Fn>(fn));
   }
 
-  template <ComponentType T>
-  [[nodiscard]] PackedStorage<T> *GetStorage() {
-    const auto it = m_storages.find(std::type_index(typeid(T)));
-    if (it == m_storages.end()) return nullptr;
-    return static_cast<PackedStorage<T> *>(it->second.get());
-  }
-
-  // Called by Game::Run in order: Update -> CallOnUpdate -> RunCollision -> Render
-  void Update(float deltaTime);  // physics only
-  void RunCollision();           // AABB detection on final positions
+  // ---- Frame entry points (called by Game::Run) ---------------------------
+  void Update(float deltaTime);   // physics only
+  void RunCollision();            // AABB detection on final positions
   void Render(SDL_Renderer *renderer);
 
 private:
   std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_storages;
-  std::queue<EntityId> m_freeList;
+  std::queue<EntityId>  m_freeList;
+  std::vector<EntityId> m_pendingDestroy;
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {
@@ -156,4 +176,18 @@ private:
     m_storages.emplace(key, std::move(storage));
     return *ptr;
   }
+
+  // GetStorage<T>() is private. Systems use World::ForEach or GetComponent.
+  // TextSystem needs direct storage access for layer sorting — granted via friend.
+  template <ComponentType T>
+  [[nodiscard]] PackedStorage<T> *GetStorage() {
+    const auto it = m_storages.find(std::type_index(typeid(T)));
+    if (it == m_storages.end()) return nullptr;
+    return static_cast<PackedStorage<T> *>(it->second.get());
+  }
+
+  friend struct TextSystem;
+  friend struct RenderSystem;
+  friend struct CollisionSystem;
+  friend struct PhysicsSystem;
 };
