@@ -4,6 +4,7 @@
 #include "ecs/systems/TextSystem.hpp"
 #include "input/InputManager.hpp"
 #include "rendering/FontManager.hpp"
+#include "rendering/TextureManager.hpp"
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
@@ -34,11 +35,13 @@ bool Game::Initialize() {
   m_world     = std::make_unique<World>();
   m_input     = std::make_unique<InputManager>();
   m_fonts     = std::make_unique<FontManager>();
+  m_textures  = std::make_unique<TextureManager>(m_renderer);
   m_scripting = std::make_unique<ScriptingEngine>();
 
   m_scripting->BindWorld(m_world.get());
   m_scripting->BindInput(m_input.get());
   m_scripting->BindFonts(m_fonts.get());
+  m_scripting->BindTextures(m_textures.get());
 
   if (!m_scripting->RunString(game_script::source, game_script::name)) {
     SDL_Log("Failed to load game script: %s", game_script::name);
@@ -109,6 +112,7 @@ void Game::Run() {
 void Game::Shutdown() {
   m_scripting.reset();
   m_world.reset();
+  m_textures.reset();
   m_fonts.reset();
   m_input.reset();
   SDL_DestroyRenderer(m_renderer);

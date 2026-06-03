@@ -4,9 +4,11 @@
 // --------------------------------------------------------------------------
 
 #include "scripting/ScriptingEngine.hpp"
+#include "scripting/RawBinding.hpp"
 
 #include "ecs/World.hpp"
 #include "ecs/Entity.hpp"
+#include "ecs/components/AnimationComponent.hpp"
 #include "ecs/components/KinematicComponent.hpp"
 #include "ecs/components/SpriteComponent.hpp"
 #include "ecs/components/TagComponent.hpp"
@@ -14,6 +16,7 @@
 #include "ecs/components/TransformComponent.hpp"
 #include "input/InputManager.hpp"
 #include "rendering/FontManager.hpp"
+#include "rendering/TextureManager.hpp"
 
 #include <SDL3/SDL.h>
 #include <iostream>
@@ -40,6 +43,7 @@ struct ScriptingEngine::Impl {
   sol::state    lua;
   sol::function onUpdateFn;
   std::function<void()> pendingScene;
+  World        *m_world{nullptr};
 
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
@@ -50,6 +54,7 @@ struct ScriptingEngine::Impl {
   }
 
   void BindWorld(World *world) {
+    m_world = world;
     auto w = lua.create_named_table("world");
 
     w.set_function("create_entity",  [world]() -> EntityId { return world->CreateEntity(); });
@@ -69,6 +74,15 @@ struct ScriptingEngine::Impl {
           if (auto *t = world->GetComponent<TransformComponent>(e))
             return {t->position.x, t->position.y};
           return {0.f, 0.f};
+        });
+    w.set_function("set_rotation",
+        [world](EntityId e, float deg) {
+          if (auto *t = world->GetComponent<TransformComponent>(e)) t->rotation = deg;
+        });
+    w.set_function("get_rotation",
+        [world](EntityId e) -> float {
+          if (auto *t = world->GetComponent<TransformComponent>(e)) return t->rotation;
+          return 0.f;
         });
 
     w.set_function("add_kinematic", [world](EntityId e) { world->AddComponent<KinematicComponent>(e); });
@@ -99,6 +113,98 @@ struct ScriptingEngine::Impl {
         [world](EntityId e, int layer) {
           if (auto *s = world->GetComponent<SpriteComponent>(e)) s->layer = layer;
         });
+
+    // -- Texture API ----------------------------------------------------------
+    // set_sprite_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
+    // See scripting/RawBinding.hpp for the full explanation.
+    {
+      lua_State *L = lua.lua_state();
+      RegisterRaw(L, "world", "set_sprite_texture",
+        [](lua_State *L_) -> int {
+          auto *world_ = static_cast<World *>(lua_touserdata(L_, lua_upvalueindex(1)));
+          auto  e      = static_cast<EntityId>(luaL_checkinteger(L_, 1));
+          if (!lua_islightuserdata(L_, 2))
+            return luaL_error(L_, "set_sprite_texture: arg 2 must be a texture (lightuserdata)");
+          auto *tex = static_cast<SDL_Texture *>(lua_touserdata(L_, 2));
+          float sx = lua_isnoneornil(L_, 3) ? 0.f : static_cast<float>(luaL_checknumber(L_, 3));
+          float sy = lua_isnoneornil(L_, 4) ? 0.f : static_cast<float>(luaL_checknumber(L_, 4));
+          float sw = lua_isnoneornil(L_, 5) ? 0.f : static_cast<float>(luaL_checknumber(L_, 5));
+          float sh = lua_isnoneornil(L_, 6) ? 0.f : static_cast<float>(luaL_checknumber(L_, 6));
+          if (auto *s = world_->GetComponent<SpriteComponent>(e)) {
+            s->texture = tex;
+            s->srcRect = {sx, sy, sw, sh};
+          }
+          return 0;
+        },
+        static_cast<void *>(world));
+    }
+
+    w.set_function("set_sprite_src",
+        [world](EntityId e, float sx, float sy, float sw, float sh) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e))
+            s->srcRect = {sx, sy, sw, sh};
+        });
+    w.set_function("set_sprite_flip",
+        [world](EntityId e, bool flipX, bool flipY) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e)) {
+            const int f = (flipX ? SDL_FLIP_HORIZONTAL : 0)
+                        | (flipY ? SDL_FLIP_VERTICAL   : 0);
+            s->flip = static_cast<SDL_FlipMode>(f);
+          }
+        });
+    w.set_function("set_sprite_tint",
+        [world](EntityId e, int r, int g, int b, sol::optional<int> a) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e))
+            s->tint = SDL_Color{
+                static_cast<Uint8>(r), static_cast<Uint8>(g),
+                static_cast<Uint8>(b), static_cast<Uint8>(a.value_or(255))};
+        });
+    // -------------------------------------------------------------------------
+
+    // -- Animation API --------------------------------------------------------
+    w.set_function("add_animation",
+        [world](EntityId e, sol::table frames, float dur, sol::optional<bool> loop) {
+          auto &anim = world->AddComponent<AnimationComponent>(e);
+          anim.frameDuration = dur;
+          anim.loop = loop.value_or(true);
+          anim.frames.clear();
+          anim.frames.reserve(frames.size());
+          for (std::size_t i = 1; i <= frames.size(); ++i) {
+            sol::table f = frames[i];
+            anim.frames.push_back(Frame{
+              f.get_or("x", 0.f),
+              f.get_or("y", 0.f),
+              f.get_or("w", 0.f),
+              f.get_or("h", 0.f),
+            });
+          }
+          if (!anim.frames.empty())
+            if (auto *s = world->GetComponent<SpriteComponent>(e)) {
+              const Frame &f0 = anim.frames[0];
+              s->srcRect = {f0.x, f0.y, f0.w, f0.h};
+            }
+        });
+
+    w.set_function("set_animation_playing",
+        [world](EntityId e, bool playing) {
+          if (auto *a = world->GetComponent<AnimationComponent>(e))
+            a->playing = playing;
+        });
+
+    w.set_function("reset_animation",
+        [world](EntityId e) {
+          if (auto *a = world->GetComponent<AnimationComponent>(e)) {
+            a->currentFrame = 0;
+            a->timer = 0.f;
+            a->playing = true;
+            if (auto *s = world->GetComponent<SpriteComponent>(e))
+              if (!a->frames.empty()) {
+                const Frame &f0 = a->frames[0];
+                s->srcRect = {f0.x, f0.y, f0.w, f0.h};
+              }
+          }
+        });
+    // -------------------------------------------------------------------------
 
     w.set_function("add_tag",
         [world](EntityId e, const std::string &tag) {
@@ -183,6 +289,24 @@ struct ScriptingEngine::Impl {
 
     eng.set_function("quit", [](){ SDL_Event e; e.type = SDL_EVENT_QUIT; SDL_PushEvent(&e); });
   }
+
+  void BindTextures(TextureManager *textures) {
+    // load_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
+    // See scripting/RawBinding.hpp for the full explanation.
+    lua_State *L = lua.lua_state();
+    RegisterRaw(L, "engine", "load_texture",
+      [](lua_State *L_) -> int {
+        auto *mgr = static_cast<TextureManager *>(lua_touserdata(L_, lua_upvalueindex(1)));
+        const char *path = luaL_checkstring(L_, 1);
+        SDL_Texture *tex = mgr->Load(std::string(path));
+        if (tex)
+          lua_pushlightuserdata(L_, static_cast<void *>(tex));
+        else
+          lua_pushnil(L_);
+        return 1;
+      },
+      static_cast<void *>(textures));
+  }
 };
 
 ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
@@ -191,6 +315,7 @@ ScriptingEngine::~ScriptingEngine() = default;
 void ScriptingEngine::BindWorld(World *world)        { m_impl->BindWorld(world); }
 void ScriptingEngine::BindInput(InputManager *input) { m_impl->BindEngine(input); }
 void ScriptingEngine::BindFonts(FontManager *)       { /* fonts accessed via FONT_PATH in TextSystem */ }
+void ScriptingEngine::BindTextures(TextureManager *textures) { m_impl->BindTextures(textures); }
 
 void ScriptingEngine::ResetOnUpdate() {
   m_impl->onUpdateFn = sol::function{};
