@@ -1,158 +1,178 @@
 # 2D Engine (C++20)
 
-A 2D game engine built from scratch in **C++20**, focused on a simple ECS architecture, SDL3 rendering, and Lua scripting.
+A 2D game engine built from scratch in **C++20**, using SDL3, Lua 5.4, and a cache-friendly ECS.
 
-Currently, the engine drives a simple **Snake** prototype to validate the ECS, rendering, input, and timing model.
+The engine is scripting-driven: all game logic lives in Lua. The C++ layer owns the ECS, rendering loop, and platform bindings — it knows nothing about any specific game. A Snake prototype is embedded in the binary to validate the full stack.
 
 Licensed under the **MIT License**. See `LICENSE` for details.
 
 ## Stack
 
-| Layer                        | Library             |
-|-----------------------------|---------------------|
-| Windowing / Rendering / Input | SDL3              |
-| Math                        | GLM                 |
-| Scripting                   | sol2 + Lua 5.4      |
-| Map parsing                 | Tiled JSON + nlohmann/json |
-| Build / Dependencies        | CMake 3.28+ with FetchContent |
+| Layer | Library |
+|---|---|
+| Windowing / Rendering / Input | SDL3 |
+| Math | GLM 1.0.1 |
+| Scripting | Lua 5.4 + sol2 (develop) |
+| Map parsing | Tiled JSON + nlohmann/json 3.11 |
+| Build / Dependencies | CMake 3.28+ + FetchContent |
 
-## Architecture
+All dependencies are fetched and built automatically by CMake — no system libraries required.
 
-The engine uses an Entity-Component System (ECS) with flat component storages keyed by `std::type_index`.
-
-- **Entities** are `uint32_t` IDs created via `Entity::Create()`.
-- **Components** derive from a common `Component` base and are stored in `ComponentStorage = std::unordered_map<EntityId, std::unique_ptr<Component>>` per component type.
-- The **World** owns all component storages and is responsible for updating and rendering them each frame.
-- **Game loop** is implemented in `core/Game.{hpp,cpp}`:
-  - SDL3 window + renderer
-  - Fixed timestep update at 60 FPS (`kFixedDt = 1.0f / 60.0f`)
-  - Variable rendering with an accumulator to avoid the “spiral of death”.
-- **Scripting** is isolated behind a `ScriptingEngine` in `src/scripting/` to avoid sol2 compile-time bleed into the rest of the codebase.
-
-The goal is to keep the core small and explicit: the `Game` object owns one `World` and one `ScriptingEngine`, and drives them from a central loop.
-
-### Current gameplay demo: Snake
-
-The current demo is a minimal, classic grid-based **Snake** implementation used to exercise the engine:
-
-- The **snake head** is an entity with:
-  - `TransformComponent` (grid-aligned position and size)
-  - `SpriteComponent` (rendered as a green square)
-  - `TagComponent` with `"snake_head"`
-- **Food** is a separate entity with:
-  - `TransformComponent` (grid-aligned position and size)
-  - `SpriteComponent` (rendered as a red square)
-  - `TagComponent` with `"food"`
-- Movement is handled via:
-  - A unit grid direction stored in the transform (velocity `{±1,0}` or `{0,±1}`)
-  - A fixed **snake step time** (e.g. 10 moves per second), moving the head exactly one cell per step
-  - 180° reversals are prevented by rejecting direction changes that are exact opposites of the current direction.
-
-Snake logic lives in `Game` for now as a C++ prototype and is intended to be moved into Lua scripts once the engine-side API (entity creation, component access, input, timing) is stable.
-
-## Prerequisites
-
-You need the following tools installed locally:
-
-- A C++20-capable compiler
-  - GCC 12+ or Clang 15+ are recommended
-- **CMake 3.28+** (used to configure and build the project)
-- **SDL3**, **GLM**, **Lua 5.4** development headers, and a working link setup if your platform does not use prebuilt packages
-- A build toolchain supported by CMake (e.g. Ninja, Make, MSBuild)
-
-On Debian/Ubuntu-like systems, the basic toolchain can be installed with:
-
-```bash
-sudo apt-get install build-essential cmake ninja-build
-```
-
-Library installation will depend on your distro and how you prefer to obtain SDL3, Lua, and GLM (system packages vs. custom builds).
-
-## Cloning
-
-Clone the repository and enter the project directory:
+## Building
 
 ```bash
 git clone https://github.com/itzi97/engine2d.git
 cd engine2d
-```
-
-## Building and running
-
-From the project root:
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ./build/2d-engine
 ```
 
-- The CMake target produces a single `2d-engine` executable in the `build/` directory by default.
-- Use `CMAKE_BUILD_TYPE=Release` for an optimized build:
+Requires: a C++20 compiler (GCC 12+ or Clang 15+), CMake 3.28+, and a standard build toolchain.
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
+sudo apt-get install build-essential cmake ninja-build  # Debian/Ubuntu
 ```
 
-### Windows notes
-
-On Windows, run CMake from a “x64 Native Tools Command Prompt“ for Visual Studio, then:
+### Windows
 
 ```powershell
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --config Debug
-.\build\Debug\2d-engine.exe
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+.\build\Release\2d-engine.exe
 ```
 
-Adjust the config (`Debug`/`Release`) as needed.
+## Architecture
 
-## Controls / runtime behavior
+### ECS
 
-- A window titled **“2D Engine”** is created at 1280×720 by default.
-- Press **Escape** or close the window to exit the main loop.
-- The background currently clears to a dark gray, and the `World` is responsible for updating and rendering all components each frame.
-- The Snake demo currently consists of:
-  - A snake head that moves one grid cell at a time in response to arrow keys.
-  - A food block that spawns at a fixed grid position at startup.
-  - (Work in progress) eating food and growing the snake body.
+Entities are `uint32_t` IDs. The `World` owns one `PackedStorage<T>` per component type:
+
+```
+PackedStorage<T>
+  vector<T>                       — contiguous component data
+  vector<EntityId>                — parallel ownership array
+  unordered_map<EntityId, size_t> — O(1) entity → slot lookup
+```
+
+Iteration over all components of a type is a single linear memory scan. Deletion is swap-and-pop — the last element fills the freed slot so the array stays packed. The public API is unchanged from the caller's perspective:
+
+```cpp
+EntityId e = world.CreateEntity();
+world.AddComponent<TransformComponent>(e);
+world.GetComponent<TransformComponent>(e)->position = {100, 200};
+world.RemoveComponent<TransformComponent>(e);
+world.DestroyEntity(e);
+```
+
+### Game loop
+
+`core/Game` owns one `World` and one `ScriptingEngine` and drives them from a fixed-timestep loop:
+
+- Fixed update at **60 Hz** (`kFixedDt = 1/60`)
+- Accumulator-based timestep to avoid spiral-of-death
+- SDL3 event pump → `World::Update` → Lua `on_update` → `World::Render`
+
+### Scripting
+
+`ScriptingEngine` wraps a `sol::state` behind a pimpl so sol2 headers never leak into other translation units. It exposes:
+
+- `BindWorld(World*)` — registers the `world.*` and `engine.*` Lua tables
+- `RunString(src, chunkName)` — executes embedded Lua source via `luaL_loadbuffer` + `sol::protected_function`
+- `CallOnUpdate(dt)` — calls `engine.on_update(dt)` if registered
+
+### Script embedding
+
+Lua scripts are embedded at **CMake build time** — no files need to exist at runtime. `cmake/EmbedScriptRun.cmake` converts any `.lua` file into a `constexpr char[]` header:
+
+```cmake
+embed_script(snake scripts/snake.lua)
+# generates build/generated/embedded_snake.hpp
+# namespace embedded { inline constexpr char snake[] = "..."; }
+```
+
+The header is regenerated automatically whenever the source `.lua` file changes.
+
+## Lua API
+
+Game scripts interact with the engine through two global tables:
+
+### `world`
+
+| Function | Description |
+|---|---|
+| `world.create_entity()` → id | Create a new entity |
+| `world.destroy_entity(id)` | Destroy entity and all its components |
+| `world.add_transform(id, x, y, w, h)` | Add a TransformComponent |
+| `world.set_position(id, x, y)` | Set position |
+| `world.get_position(id)` → x, y | Get position |
+| `world.set_velocity(id, vx, vy)` | Set velocity |
+| `world.get_velocity(id)` → vx, vy | Get velocity |
+| `world.add_sprite(id, r, g, b, a)` | Add a colored rect sprite |
+| `world.add_tag(id, tag)` | Add a string tag |
+| `world.get_tag(id)` → string | Get tag string |
+
+### `engine`
+
+| Function | Description |
+|---|---|
+| `engine.on_update(fn)` | Register per-frame callback `fn(dt)` |
+| `engine.is_key_pressed(key)` | Poll key state (`"UP"`, `"DOWN"`, `"LEFT"`, `"RIGHT"`, `"W"`, `"S"`, `"A"`, `"D"`, `"ESCAPE"`) |
+
+### Example script
+
+```lua
+local e = world.create_entity()
+world.add_transform(e, 100, 100, 32, 32)
+world.add_sprite(e, 255, 80, 80, 255)
+world.add_tag(e, "player")
+
+engine.on_update(function(dt)
+  if engine.is_key_pressed("RIGHT") then
+    local x, y = world.get_position(e)
+    world.set_position(e, x + 200 * dt, y)
+  end
+end)
+```
 
 ## Project layout
 
-High‑level source layout:
-
-```text
+```
 src/
-  core/       # Game loop, SDL initialization, main engine entry (includes Snake demo for now)
-  ecs/        # ECS primitives and components (Entity, Component, World, Transform, Sprite, Tag, ...)
-  scripting/  # Lua / sol2 bindings (ScriptingEngine)
-  main.cpp    # entry point that creates and runs Game
-assets/
-  ...         # textures, maps, and other runtime data (Tiled JSON etc.)
+  core/           # Game loop, SDL init (Game.hpp / Game.cpp)
+  ecs/            # ECS: Entity, Component, World, PackedStorage
+    components/   # TransformComponent, SpriteComponent, TagComponent
+  scripting/      # ScriptingEngine (sol2 confined here)
+  main.cpp
+scripts/
+  snake.lua       # Snake game — embedded into the binary at build time
+cmake/
+  EmbedScript.cmake       # embed_script() function
+  EmbedScriptRun.cmake    # build-time .lua → .hpp converter
+assets/           # textures, Tiled maps (future)
 ```
 
-The intention is to keep SDL- and Lua-specific code isolated to `core/` and `scripting/` respectively, so the ECS layer remains decoupled from platform details.
+## Controls
 
-## Third‑party libraries
-
-This project uses the following third‑party libraries and tools:
-
-- **SDL3** – windowing, rendering, input, and basic platform abstraction. Licensed under the zlib license.
-- **GLM** – header‑only math library for vectors, matrices, and transforms. Licensed under the MIT license.
-- **Lua 5.4** – embedded scripting language used for gameplay scripting. Licensed under the MIT license.
-- **sol2** – C++17/20 bindings between Lua and C++. Licensed under the MIT license.
-- **nlohmann/json** – header‑only JSON library used for parsing Tiled maps. Licensed under the MIT license.
-- **CMake** – build system generator.
-
-You are responsible for complying with the licenses of these dependencies when using or redistributing this project.
+- Arrow keys — control snake direction
+- Escape / window close — quit
 
 ## Status
 
-This project is a work in progress. The short‑term roadmap includes:
+Working and playable. Short-term roadmap:
 
-- Flesh out core components (Transform, Sprite, Tag, simple motion, etc.)
-- Finalize a thin C++ API for entity/component access, input, and timing
-- Move the Snake demo game logic into Lua as a scripted example
-- Add basic tilemap rendering (Tiled JSON) and collision for more complex demos
+- Packed ECS storage ✅
+- Lua scripting with embedded scripts ✅
+- Snake demo ✅
+- Input event system (on_key_down / on_key_up callbacks)
+- Texture and font rendering (SDL_image / SDL_ttf)
+- Tiled JSON map loading (nlohmann/json already linked)
+- Scene management
 
-Contributions and feedback are welcome once the public API stabilizes.
+## Third-party licenses
+
+- **SDL3** — zlib license
+- **GLM** — MIT license
+- **Lua 5.4** — MIT license
+- **sol2** — MIT license
+- **nlohmann/json** — MIT license
