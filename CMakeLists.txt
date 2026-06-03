@@ -130,6 +130,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
+# stb_vorbis.c is third-party code — suppress all warnings for that TU only.
+set_source_files_properties(src/audio/stb_vorbis_impl.c PROPERTIES
+    COMPILE_OPTIONS "-w"
+)
+
 # -- DejaVu Sans font ---------------------------------------------------------
 set(FONT_DIR  "${CMAKE_SOURCE_DIR}/assets/fonts")
 set(FONT_FILE "${FONT_DIR}/DejaVuSans.ttf")
