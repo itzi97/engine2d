@@ -39,7 +39,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3_ttf)
 
 # -- SDL3_image ---------------------------------------------------------------
-set(SDLIMAGE_VENDORED TRUE CACHE BOOL "" FORCE)  # use bundled image decoders
+# Vendored decoders for PNG/JPG/BMP. AVIF disabled — it pulls in dav1d which
+# requires NASM. We never need AV1 image support in a 2D game engine.
+set(SDLIMAGE_VENDORED  TRUE  CACHE BOOL "" FORCE)
+set(SDLIMAGE_AVIF      OFF   CACHE BOOL "" FORCE)
+set(SDLIMAGE_JXL       OFF   CACHE BOOL "" FORCE)  # also uses heavy deps
 FetchContent_Declare(
     SDL3_image
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
