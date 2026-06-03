@@ -58,6 +58,9 @@ list(REMOVE_ITEM LUA_SOURCES
 )
 add_library(lua_static STATIC ${LUA_SOURCES})
 target_include_directories(lua_static PUBLIC "${lua_SOURCE_DIR}")
+# Suppress tmpnam deprecation warning that originates in Lua's loslib.c.
+# Scoped to lua_static only so our own code still catches deprecated-declarations.
+target_compile_options(lua_static PRIVATE -Wno-deprecated-declarations)
 
 # -- Lua shim -----------------------------------------------------------------
 set(LUA_SHIM_DIR "${CMAKE_BINARY_DIR}/lua-shim")

@@ -8,6 +8,7 @@
 #include "ecs/components/TransformComponent.hpp"
 
 #include <memory>
+#include <queue>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
@@ -95,11 +96,21 @@ public:
   World(const World &)            = delete;
   World &operator=(const World &) = delete;
 
-  [[nodiscard]] EntityId CreateEntity() { return Entity::Create(); }
+  // CreateEntity: reuses a recycled ID from the free list before minting a new one.
+  [[nodiscard]] EntityId CreateEntity() {
+    if (!m_freeList.empty()) {
+      const EntityId id = m_freeList.front();
+      m_freeList.pop();
+      return id;
+    }
+    return Entity::Create();
+  }
 
+  // DestroyEntity: erases all components and returns the ID to the free list.
   void DestroyEntity(EntityId entity) {
     for (auto &[type, storage] : m_storages)
       storage->Erase(entity);
+    m_freeList.push(entity);
   }
 
   template <ComponentType T, typename... Args>
@@ -122,7 +133,6 @@ public:
   }
 
   // ForEach<T>: iterate all (EntityId, T&) pairs without exposing storage layout.
-  // Prefer this over GetStorage in most systems.
   template <ComponentType T, typename Fn>
   void ForEach(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -143,6 +153,7 @@ public:
 
 private:
   std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_storages;
+  std::queue<EntityId> m_freeList;  // recycled IDs, handed out before minting new ones
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {
