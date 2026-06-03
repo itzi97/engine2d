@@ -2,13 +2,15 @@
 
 #include <SDL3/SDL.h>
 
-class World;
+class World; // forward declared — no circular include
 
-class Component {
-public:
+struct Component {
   virtual ~Component() = default;
 
-  // World is passed in so components can look up sibling components.
-  virtual void Update(float /*deltaTime*/) {}
-  virtual void Render(SDL_Renderer * /*renderer*/, World * /*world*/) {}
+  // Called every frame by PackedStorage<T>::Update
+  virtual void Update([[maybe_unused]] float dt) {}
+
+  // Called every frame by PackedStorage<T>::Render
+  virtual void Render([[maybe_unused]] SDL_Renderer *renderer,
+                      [[maybe_unused]] World *world) {}
 };

@@ -3,19 +3,14 @@
 #include "ecs/Entity.hpp"
 #include <SDL3/SDL.h>
 
-// Forward declare to avoid circular includes at render time
 class World;
 
-class SpriteComponent : public Component {
-public:
-  SpriteComponent(EntityId owner,
-                  SDL_Color color = SDL_Color{255, 255, 255, 255})
-      : m_owner(owner), m_color(color) {}
+struct SpriteComponent : Component {
+  EntityId  owner;
+  SDL_Color color{255, 255, 255, 255};
 
-  // World pointer injected at render time by World::Render()
+  SpriteComponent(EntityId owner, SDL_Color color = {255, 255, 255, 255})
+      : owner(owner), color(color) {}
+
   void Render(SDL_Renderer *renderer, World *world) override;
-
-private:
-  EntityId  m_owner;
-  SDL_Color m_color;
 };
