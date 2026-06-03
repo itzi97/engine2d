@@ -1,18 +1,14 @@
 #pragma once
 
-struct SDL_Renderer;
+#include <SDL3/SDL.h>
 
-/// Abstract base for all components.
+class World;
+
 class Component {
 public:
-  Component() = default;
   virtual ~Component() = default;
 
-  Component(const Component &) = delete;
-  Component &operator=(const Component &) = delete;
-  Component(Component &&) = default;
-  Component &operator=(Component &&) = default;
-
-  virtual void Update([[maybe_unused]] float dt) {}
-  virtual void Render([[maybe_unused]] SDL_Renderer *renderer) {}
+  // World is passed in so components can look up sibling components.
+  virtual void Update(float /*deltaTime*/) {}
+  virtual void Render(SDL_Renderer * /*renderer*/, World * /*world*/) {}
 };
