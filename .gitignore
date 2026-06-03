@@ -17,3 +17,6 @@ _deps/
 
 # Downloaded at configure time — not tracked in git
 assets/fonts/
+
+# Ignore audio assets
+assets/audio/
