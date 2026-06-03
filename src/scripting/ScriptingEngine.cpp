@@ -84,7 +84,7 @@ struct ScriptingEngine::Impl {
                    [world](EntityId e, float vx, float vy) {
                      if (auto *k = world->GetComponent<KinematicComponent>(e))
                        k->velocity = {vx, vy};
-                     });
+                   });
     w.set_function("get_velocity",
                    [world](EntityId e) -> std::tuple<float, float> {
                      if (auto *k = world->GetComponent<KinematicComponent>(e))
@@ -113,49 +113,32 @@ struct ScriptingEngine::Impl {
       return "";
     });
 
-    // Collision queries — valid to call any time inside on_update.
+    // Collision queries -- valid to call any time inside on_update.
     // Results reflect positions after PhysicsSystem ran this frame.
-    //
-    // world.get_collisions_for(entity)
-    //   -> table of {a=EntityId, b=EntityId} pairs involving entity
-    //
-    // world.get_collisions_tagged(tag)
-    //   -> table of {a=EntityId, b=EntityId} pairs where either side has tag
-    w.set_function("get_collisions_for",
-                   [world](EntityId entity) -> sol::table {
-                     (void)world;
-                     auto &lua  = *reinterpret_cast<sol::state *>(nullptr); // placeholder
-                     (void)lua;
-                     // We can't access sol::state here directly; handled below
-                     // via a lambda that captures the lua state.
-                     (void)entity;
-                     return sol::table{}; // unreachable — replaced below
-                   });
-
-    // Replace with proper captures now that we have lua state access
     w.set_function("get_collisions_for",
                    [this, world](EntityId entity) -> sol::table {
-                     auto t = lua.create_table();
-                     int  i = 1;
+                     (void)world;
+                     auto tbl = lua.create_table();
+                     int  i   = 1;
                      for (const auto &c : CollisionSystem::GetCollisionsFor(entity)) {
                        auto row  = lua.create_table();
                        row["a"] = c.a;
                        row["b"] = c.b;
-                       t[i++]   = row;
+                       tbl[i++] = row;
                      }
-                     return t;
+                     return tbl;
                    });
     w.set_function("get_collisions_tagged",
                    [this, world](const std::string &tag) -> sol::table {
-                     auto t = lua.create_table();
-                     int  i = 1;
+                     auto tbl = lua.create_table();
+                     int  i   = 1;
                      for (const auto &c : CollisionSystem::GetCollisionsTagged(*world, tag)) {
                        auto row  = lua.create_table();
                        row["a"] = c.a;
                        row["b"] = c.b;
-                       t[i++]   = row;
+                       tbl[i++] = row;
                      }
-                     return t;
+                     return tbl;
                    });
   }
 
