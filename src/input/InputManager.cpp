@@ -1,11 +1,16 @@
 #include "input/InputManager.hpp"
+#include <SDL3/SDL.h>
 
 void InputManager::ProcessEvent(const SDL_Event &event) {
   switch (event.type) {
     case SDL_EVENT_KEY_DOWN:
+      SDL_Log("[Input] KEY_DOWN  key=0x%X  scancode=%d  repeat=%d",
+              (unsigned)event.key.key, (int)event.key.scancode, (int)event.key.repeat);
       m_curr[event.key.key] = true;
       break;
     case SDL_EVENT_KEY_UP:
+      SDL_Log("[Input] KEY_UP    key=0x%X  scancode=%d",
+              (unsigned)event.key.key, (int)event.key.scancode);
       m_curr[event.key.key] = false;
       break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -38,7 +43,10 @@ bool InputManager::IsKeyJustPressed(SDL_Keycode key) const {
   const auto p = m_prev.find(key);
   const bool curr = c != m_curr.end() && c->second;
   const bool prev = p != m_prev.end() && p->second;
-  return curr && !prev;
+  const bool result = curr && !prev;
+  if (result)
+    SDL_Log("[Input] IsKeyJustPressed FIRED key=0x%X", (unsigned)key);
+  return result;
 }
 
 bool InputManager::IsKeyJustReleased(SDL_Keycode key) const {
