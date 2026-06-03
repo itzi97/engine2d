@@ -6,19 +6,10 @@
 
 #include <SDL3/SDL.h>
 
-// EmbedScript.cmake generates:
-//   build/generated/embedded_<GAME>.hpp
-// containing:
-//   namespace embedded { inline constexpr char <GAME>[] = "...lua source..."; }
-//
-// GAME_SCRIPT_NAME is set by CMake as a compile definition (e.g. "snake").
-// We use the X-macro trick to build the include path and symbol at compile time.
-#define EMBED_HEADER2(name) #name
-#define EMBED_HEADER(name)  EMBED_HEADER2(embedded_ ## name ## .hpp)
-#include EMBED_HEADER(GAME_SCRIPT_NAME)
-
-#define EMBED_SOURCE2(name) embedded::name
-#define EMBED_SOURCE(name)  EMBED_SOURCE2(name)
+// game_script_shim.hpp is generated at CMake configure time by
+// cmake/GenerateGameShim.cmake. It includes the correct embedded_<GAME>.hpp
+// and exposes game_script::source and game_script::name.
+#include "game_script_shim.hpp"
 
 Game::Game() = default;
 Game::~Game() = default;
@@ -48,8 +39,8 @@ bool Game::Init() {
   m_scripting->BindWorld(m_world.get());
   m_scripting->BindInput(m_input.get());
 
-  if (!m_scripting->RunString(EMBED_SOURCE(GAME_SCRIPT_NAME), GAME_SCRIPT_NAME)) {
-    SDL_Log("Failed to load game script: %s", GAME_SCRIPT_NAME);
+  if (!m_scripting->RunString(game_script::source, game_script::name)) {
+    SDL_Log("Failed to load game script: %s", game_script::name);
     return false;
   }
 

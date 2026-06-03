@@ -59,7 +59,6 @@ list(REMOVE_ITEM LUA_SOURCES
 add_library(lua_static STATIC ${LUA_SOURCES})
 target_include_directories(lua_static PUBLIC "${lua_SOURCE_DIR}")
 # Suppress tmpnam deprecation warning that originates in Lua's loslib.c.
-# Scoped to lua_static only so our own code still catches deprecated-declarations.
 target_compile_options(lua_static PRIVATE -Wno-deprecated-declarations)
 
 # -- Lua shim -----------------------------------------------------------------
@@ -106,8 +105,16 @@ FetchContent_MakeAvailable(nlohmann_json)
 # -- Embed selected game script -----------------------------------------------
 embed_script(${GAME} scripts/${GAME}.lua)
 
-string(TOUPPER "${GAME}" GAME_UPPER)
-add_compile_definitions(GAME_SCRIPT_NAME="${GAME}" GAME_SCRIPT_${GAME_UPPER}=1)
+# Generate game_script_shim.hpp at configure time so Game.cpp can include it
+# without any preprocessor tricks. Re-runs if GAME changes.
+set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${GENERATED_DIR}")
+execute_process(
+    COMMAND ${CMAKE_COMMAND}
+            -DGAME_NAME=${GAME}
+            -DOUT_DIR=${GENERATED_DIR}
+            -P "${CMAKE_SOURCE_DIR}/cmake/GenerateGameShim.cmake"
+)
 
 # -- Sources ------------------------------------------------------------------
 set(ENGINE_SOURCES
@@ -128,7 +135,7 @@ add_dependencies(${PROJECT_NAME} embed_${GAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
-    "${CMAKE_BINARY_DIR}/generated"
+    "${GENERATED_DIR}"
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
 )
