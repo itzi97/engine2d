@@ -113,9 +113,6 @@ struct ScriptingEngine::Impl {
         });
 
     // -- Texture API ----------------------------------------------------------
-    // world.set_sprite_texture(e, tex, sx, sy, sw, sh)
-    //   tex        : lightuserdata from engine.load_texture()
-    //   sx,sy,sw,sh: source rect on the atlas; omit (or pass 0,0,0,0) for full texture
     w.set_function("set_sprite_texture",
         [world](EntityId e, SDL_Texture *tex,
                 sol::optional<float> sx, sol::optional<float> sy,
@@ -126,15 +123,11 @@ struct ScriptingEngine::Impl {
                            sw.value_or(0.f), sh.value_or(0.f) };
           }
         });
-
-    // world.set_sprite_src(e, sx, sy, sw, sh)  — change atlas rect without changing texture
     w.set_function("set_sprite_src",
         [world](EntityId e, float sx, float sy, float sw, float sh) {
           if (auto *s = world->GetComponent<SpriteComponent>(e))
             s->srcRect = {sx, sy, sw, sh};
         });
-
-    // world.set_sprite_flip(e, flipX, flipY)
     w.set_function("set_sprite_flip",
         [world](EntityId e, bool flipX, bool flipY) {
           if (auto *s = world->GetComponent<SpriteComponent>(e)) {
@@ -230,13 +223,15 @@ struct ScriptingEngine::Impl {
   }
 
   void BindTextures(TextureManager *textures) {
-    // engine.load_texture(path) → lightuserdata (SDL_Texture*)
-    // Lifetime: texture is owned by TextureManager, valid for the entire session.
     auto eng = lua["engine"];
-    eng.set_function("load_texture",
-        [textures](const std::string &path) -> SDL_Texture * {
-          return textures->Load(path);
-        });
+    // sol2 on GCC 16+ misdeduces lambdas that return raw non-class pointers
+    // (e.g. SDL_Texture* ~ char*) as pointer-to-value rather than callables.
+    // sol::as_function forces the correct callable treatment.
+    using LoadFn = std::function<SDL_Texture*(const std::string&)>;
+    LoadFn loadFn = [textures](const std::string &path) -> SDL_Texture* {
+      return textures->Load(path);
+    };
+    eng.set_function("load_texture", sol::as_function(std::move(loadFn)));
   }
 };
 
