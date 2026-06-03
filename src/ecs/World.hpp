@@ -3,6 +3,9 @@
 #include "ecs/Component.hpp"
 #include "ecs/Entity.hpp"
 #include "ecs/components/KinematicComponent.hpp"
+#include "ecs/components/SpriteComponent.hpp"
+#include "ecs/components/TagComponent.hpp"
+#include "ecs/components/TransformComponent.hpp"
 
 #include <memory>
 #include <typeindex>
@@ -71,6 +74,18 @@ struct PackedStorage final : IComponentStorage {
 };
 
 // ---------------------------------------------------------------------------
+// Update priority order — lower index runs first.
+// TransformComponent must run before KinematicComponent.
+// Add new types here when they have order dependencies.
+// ---------------------------------------------------------------------------
+static inline const std::vector<std::type_index> kUpdateOrder = {
+  std::type_index(typeid(TransformComponent)),
+  std::type_index(typeid(KinematicComponent)),
+  std::type_index(typeid(SpriteComponent)),
+  std::type_index(typeid(TagComponent)),
+};
+
+// ---------------------------------------------------------------------------
 // World
 // ---------------------------------------------------------------------------
 class World {
@@ -108,7 +123,6 @@ public:
   }
 
   // Factory for KinematicComponent: injects World* atomically.
-  // Always use this instead of AddComponent<KinematicComponent>.
   KinematicComponent &AddKinematic(EntityId entity);
 
   void Update(float deltaTime);
