@@ -14,3 +14,6 @@ CMakeFiles/
 CPackConfig.cmake
 CPackSourceConfig.cmake
 _deps/
+
+# Downloaded at configure time — not tracked in git
+assets/fonts/
