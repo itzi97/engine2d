@@ -8,6 +8,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
 include(cmake/EmbedScript.cmake)
 
+# ---------------------------------------------------------------------------
+# Game selection: cmake -B build -DGAME=snake   (default: snake)
+#                 cmake -B build -DGAME=breakout
+# ---------------------------------------------------------------------------
+set(GAME "snake" CACHE STRING "Game script to embed (filename without .lua)")
+set_property(CACHE GAME PROPERTY STRINGS snake breakout)
+
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/scripts/${GAME}.lua")
+  message(FATAL_ERROR "Game script not found: scripts/${GAME}.lua")
+endif()
+
+message(STATUS "Building game: ${GAME}")
+
 # -- SDL3 ---------------------------------------------------------------------
 FetchContent_Declare(
     SDL3
@@ -87,8 +100,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-# -- Embed Lua scripts --------------------------------------------------------
-embed_script(snake scripts/snake.lua)
+# -- Embed selected game script -----------------------------------------------
+embed_script(${GAME} scripts/${GAME}.lua)
+
+# Pass the selected game name to C++ as a preprocessor definition
+# so Game.cpp knows which embedded:: symbol to call.
+string(TOUPPER "${GAME}" GAME_UPPER)
+add_compile_definitions(GAME_SCRIPT_NAME="${GAME}" GAME_SCRIPT_${GAME_UPPER}=1)
 
 # -- Sources ------------------------------------------------------------------
 set(ENGINE_SOURCES
@@ -101,7 +119,7 @@ set(ENGINE_SOURCES
 )
 
 add_executable(${PROJECT_NAME} ${ENGINE_SOURCES})
-add_dependencies(${PROJECT_NAME} embed_snake)
+add_dependencies(${PROJECT_NAME} embed_${GAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
