@@ -1,16 +1,20 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <concepts>
 
-class World; // forward declared — no circular include
+class World;
 
+// Base component interface. All components must be default-constructible
+// and movable so PackedStorage<T> can manage them in a contiguous vector.
 struct Component {
   virtual ~Component() = default;
-
-  // Called every frame by PackedStorage<T>::Update
   virtual void Update([[maybe_unused]] float dt) {}
-
-  // Called every frame by PackedStorage<T>::Render
   virtual void Render([[maybe_unused]] SDL_Renderer *renderer,
                       [[maybe_unused]] World *world) {}
 };
+
+// C++20 concept: T is a valid ECS component
+template <typename T>
+concept ComponentType = std::derived_from<T, Component>
+                     && std::move_constructible<T>;

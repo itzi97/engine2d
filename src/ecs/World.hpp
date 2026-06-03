@@ -7,7 +7,6 @@
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
-#include <algorithm>
 
 #include <SDL3/SDL.h>
 
@@ -16,19 +15,19 @@
 // ---------------------------------------------------------------------------
 struct IComponentStorage {
   virtual ~IComponentStorage() = default;
-  virtual void Erase(EntityId entity)                    = 0;
-  virtual void Update(float dt)                          = 0;
+  virtual void Erase(EntityId entity)                       = 0;
+  virtual void Update(float dt)                             = 0;
   virtual void Render(SDL_Renderer *renderer, World *world) = 0;
 };
 
 // ---------------------------------------------------------------------------
 // PackedStorage<T>: contiguous vector + O(1) lookup + swap-and-pop removal
 // ---------------------------------------------------------------------------
-template <typename T>
+template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
-  std::vector<T>                        components; // tightly packed data
-  std::vector<EntityId>                 entities;   // parallel: entities[i] owns components[i]
-  std::unordered_map<EntityId, size_t>  index;      // entity -> slot
+  std::vector<T>                       components;
+  std::vector<EntityId>                entities;
+  std::unordered_map<EntityId, size_t> index;
 
   T &Add(EntityId entity, T &&component) {
     index[entity] = components.size();
@@ -51,10 +50,9 @@ struct PackedStorage final : IComponentStorage {
     const size_t last = components.size() - 1;
 
     if (slot != last) {
-      // Swap with last element to keep the array packed
-      components[slot]         = std::move(components[last]);
-      entities[slot]           = entities[last];
-      index[entities[slot]]    = slot;
+      components[slot]      = std::move(components[last]);
+      entities[slot]        = entities[last];
+      index[entities[slot]] = slot;
     }
 
     components.pop_back();
@@ -63,13 +61,11 @@ struct PackedStorage final : IComponentStorage {
   }
 
   void Update(float dt) override {
-    for (auto &c : components)
-      c.Update(dt);
+    for (auto &c : components) c.Update(dt);
   }
 
   void Render(SDL_Renderer *renderer, World *world) override {
-    for (auto &c : components)
-      c.Render(renderer, world);
+    for (auto &c : components) c.Render(renderer, world);
   }
 };
 
@@ -91,21 +87,19 @@ public:
       storage->Erase(entity);
   }
 
-  template <typename T, typename... Args>
+  template <ComponentType T, typename... Args>
   T &AddComponent(EntityId entity, Args &&...args) {
-    static_assert(std::is_base_of_v<Component, T>, "T must derive from Component");
     return GetOrCreateStorage<T>().Add(entity, T{std::forward<Args>(args)...});
   }
 
-  template <typename T>
+  template <ComponentType T>
   [[nodiscard]] T *GetComponent(EntityId entity) {
-    static_assert(std::is_base_of_v<Component, T>, "T must derive from Component");
     const auto it = m_storages.find(std::type_index(typeid(T)));
     if (it == m_storages.end()) return nullptr;
     return static_cast<PackedStorage<T> *>(it->second.get())->Get(entity);
   }
 
-  template <typename T>
+  template <ComponentType T>
   void RemoveComponent(EntityId entity) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
     if (it == m_storages.end()) return;
@@ -118,14 +112,14 @@ public:
 private:
   std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_storages;
 
-  template <typename T>
+  template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {
     const auto key = std::type_index(typeid(T));
     const auto it  = m_storages.find(key);
     if (it != m_storages.end())
       return *static_cast<PackedStorage<T> *>(it->second.get());
-    auto storage = std::make_unique<PackedStorage<T>>();
-    auto *ptr    = storage.get();
+    auto  storage = std::make_unique<PackedStorage<T>>();
+    auto *ptr     = storage.get();
     m_storages.emplace(key, std::move(storage));
     return *ptr;
   }
