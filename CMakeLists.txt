@@ -106,34 +106,27 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 # -- DejaVu Sans font ---------------------------------------------------------
-# Downloaded from the official GitHub release tarball (stable URL, SHA256-verified).
-# The tarball is extracted once into the build directory; only DejaVuSans.ttf is
-# copied to assets/fonts/ for use at runtime via the FONT_PATH compile definition.
+# FetchContent downloads the official release tarball and verifies its hash.
+# A failed download is a hard configure error (unlike file(DOWNLOAD) which
+# silently writes a 0-byte file on failure).
+# The tarball is unpacked into build/_deps/dejavu_fonts-src; we copy the one
+# file we need into assets/fonts/ so FONT_PATH stays a stable source-tree path.
 set(FONT_DIR  "${CMAKE_SOURCE_DIR}/assets/fonts")
 set(FONT_FILE "${FONT_DIR}/DejaVuSans.ttf")
+
 if(NOT EXISTS "${FONT_FILE}")
-  message(STATUS "Downloading DejaVu fonts release tarball...")
-  set(_DEJAVU_TAR "${CMAKE_BINARY_DIR}/dejavu-fonts-ttf-2.37.tar.bz2")
+  FetchContent_Declare(
+      dejavu_fonts
+      URL      https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2
+      URL_HASH SHA256=fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_MakeAvailable(dejavu_fonts)
+
   file(MAKE_DIRECTORY "${FONT_DIR}")
-  file(DOWNLOAD
-    "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2"
-    "${_DEJAVU_TAR}"
-    EXPECTED_HASH SHA256=fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7
-    TLS_VERIFY ON
-    SHOW_PROGRESS
-  )
-  message(STATUS "Extracting DejaVuSans.ttf...")
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} -E tar xf "${_DEJAVU_TAR}"
-            "dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf"
-    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-  )
-  file(COPY
-    "${CMAKE_BINARY_DIR}/dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf"
-    DESTINATION "${FONT_DIR}"
-  )
-  file(REMOVE "${_DEJAVU_TAR}")
-  file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/dejavu-fonts-ttf-2.37")
+  file(COPY "${dejavu_fonts_SOURCE_DIR}/ttf/DejaVuSans.ttf"
+       DESTINATION "${FONT_DIR}")
+  message(STATUS "DejaVuSans.ttf installed to ${FONT_FILE}")
 endif()
 
 # -- Embed selected game script -----------------------------------------------
