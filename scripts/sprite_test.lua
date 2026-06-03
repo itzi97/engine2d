@@ -1,32 +1,34 @@
 -- sprite_test.lua
--- Tests engine.load_texture, world.set_sprite_texture, set_sprite_src,
--- set_sprite_flip. Uses the bundled simpleSpace_sheet.png atlas.
+-- Tests textures + AnimationSystem.
+-- One entity cycles through all ship variants as an animation,
+-- another shows a static meteor for comparison.
 --
--- Build with: cmake -B build -DGAME=sprite_test && cmake --build build -j
--- Run from repo root: ./build/2d-engine
+-- Build: cmake -B build -DGAME=sprite_test && cmake --build build -j
+-- Run:   ./build/2d-engine  (from repo root)
 
 local SHEET = "assets/sprites/simpleSpace_sheet.png"
 
--- Coords taken directly from simpleSpace_sheet.xml
-local SPR = {
-  ship_D   = { x =  64, y =   0, w = 48, h = 32 },  -- small fighter
-  ship_G   = { x =  60, y =  32, w = 48, h = 48 },  -- medium fighter
-  ship_F   = { x =  96, y = 388, w = 48, h = 48 },  -- large fighter
-  enemy_A  = { x =   0, y = 420, w = 48, h = 48 },  -- enemy saucer
-  enemy_B  = { x = 100, y = 140, w = 48, h = 48 },  -- enemy wedge
-  meteor   = { x = 144, y = 380, w = 48, h = 48 },  -- round meteor
-  star     = { x =  52, y = 196, w = 48, h = 48 },  -- large star
+-- All ship frames from simpleSpace_sheet.xml, in order
+local SHIP_FRAMES = {
+  { x =  64, y =   0, w = 48, h = 32 },  -- ship_D
+  { x =  60, y =  32, w = 48, h = 48 },  -- ship_G
+  { x =  56, y =  92, w = 48, h = 48 },  -- ship_H
+  { x =  52, y = 244, w = 48, h = 48 },  -- ship_L
+  { x =  52, y = 292, w = 48, h = 48 },  -- ship_J
+  { x =  96, y = 388, w = 48, h = 48 },  -- ship_F
+  { x =  96, y = 436, w = 48, h = 48 },  -- ship_E
+}
+
+-- Enemy frames
+local ENEMY_FRAMES = {
+  { x =   0, y =   0, w = 64, h = 32 },  -- enemy_C
+  { x = 100, y = 140, w = 48, h = 48 },  -- enemy_B
+  { x = 100, y = 188, w = 48, h = 48 },  -- enemy_D
+  { x = 100, y = 332, w = 48, h = 48 },  -- enemy_E
+  { x =   0, y = 420, w = 48, h = 48 },  -- enemy_A
 }
 
 local tex
-
-local function make_sprite(x, y, w, h, src)
-  local e = world.create_entity()
-  world.add_transform(e, x, y, w, h)
-  world.add_sprite(e, 255, 255, 255, 255)
-  world.set_sprite_texture(e, tex, src.x, src.y, src.w, src.h)
-  return e
-end
 
 local function load_scene()
   tex = engine.load_texture(SHEET)
@@ -34,27 +36,40 @@ local function load_scene()
     log("[sprite_test] ERROR: could not load " .. SHEET)
     return
   end
-  log("[sprite_test] texture loaded OK")
 
-  -- Row 1: three different ships
-  make_sprite( 50,  50, 96, 64, SPR.ship_D)
-  make_sprite(200,  50, 96, 96, SPR.ship_G)
-  make_sprite(350,  50, 96, 96, SPR.ship_F)
+  -- Animated ship: cycles through all ship variants at 0.15s/frame
+  local ship = world.create_entity()
+  world.add_transform(ship, 80, 80, 96, 96)
+  world.add_sprite(ship, 255, 255, 255, 255)
+  world.set_sprite_texture(ship, tex, SHIP_FRAMES[1].x, SHIP_FRAMES[1].y,
+                                      SHIP_FRAMES[1].w, SHIP_FRAMES[1].h)
+  world.add_animation(ship, SHIP_FRAMES, 0.15)
 
-  -- Row 2: enemies, normal + H-flipped
-  local eA = make_sprite( 50, 200, 96, 96, SPR.enemy_A)
-  local eB = make_sprite(200, 200, 96, 96, SPR.enemy_B)
-  world.set_sprite_flip(eB, true, false)
+  -- Animated enemy: cycles through enemy variants at 0.2s/frame
+  local enemy = world.create_entity()
+  world.add_transform(enemy, 240, 80, 96, 96)
+  world.add_sprite(enemy, 255, 255, 255, 255)
+  world.set_sprite_texture(enemy, tex, ENEMY_FRAMES[1].x, ENEMY_FRAMES[1].y,
+                                       ENEMY_FRAMES[1].w, ENEMY_FRAMES[1].h)
+  world.add_animation(enemy, ENEMY_FRAMES, 0.2)
 
-  -- Row 3: meteor + star (non-character sprites)
-  make_sprite( 50, 360, 96, 96, SPR.meteor)
-  make_sprite(200, 360, 96, 96, SPR.star)
+  -- Static meteor for comparison (no AnimationComponent)
+  local rock = world.create_entity()
+  world.add_transform(rock, 400, 80, 96, 96)
+  world.add_sprite(rock, 255, 255, 255, 255)
+  world.set_sprite_texture(rock, tex, 144, 380, 48, 48)  -- meteor_large
 
-  -- One ship flipped vertically to test that axis
-  local ship_vflip = make_sprite(350, 200, 96, 96, SPR.ship_G)
-  world.set_sprite_flip(ship_vflip, false, true)
+  -- One-shot animation (loop=false): plays once then holds last frame
+  local star = world.create_entity()
+  world.add_transform(star, 80, 240, 96, 96)
+  world.add_sprite(star, 255, 255, 255, 255)
+  world.set_sprite_texture(star, tex, 52, 196, 48, 48)
+  world.add_animation(star, {
+    { x = 52, y = 196, w = 48, h = 48 },  -- star_large
+    { x = 52, y = 148, w = 48, h = 48 },  -- star_medium
+  }, 0.3, false)  -- loop=false
 
-  log("[sprite_test] scene ready: 8 sprites, 3 rows")
+  log("[sprite_test] scene ready")
 end
 
 load_scene()

@@ -7,6 +7,7 @@
 
 #include "ecs/World.hpp"
 #include "ecs/Entity.hpp"
+#include "ecs/components/AnimationComponent.hpp"
 #include "ecs/components/KinematicComponent.hpp"
 #include "ecs/components/SpriteComponent.hpp"
 #include "ecs/components/TagComponent.hpp"
@@ -39,7 +40,6 @@ static SDL_Keycode KeycodeFromString(const std::string &key) {
 
 // ---------------------------------------------------------------------------
 // Raw-API helper: register a lua_CFunction closure into a named table field.
-// Stack must be clean before calling; it is clean after.
 static void SetRawFunction(lua_State *L, const char *table,
                            const char *field,
                            lua_CFunction fn,
@@ -129,10 +129,6 @@ struct ScriptingEngine::Impl {
         });
 
     // -- Texture API ----------------------------------------------------------
-    // world.set_sprite_texture(e, tex [, sx, sy, sw, sh])
-    // tex is a lightuserdata (SDL_Texture*) from engine.load_texture().
-    // sol2 cannot unpack lightuserdata into SDL_Texture*, so we use a raw
-    // lua_CFunction closure with the World* as an upvalue.
     {
       lua_State *L = lua.lua_state();
       SetRawFunction(L, "world", "set_sprite_texture",
@@ -166,6 +162,48 @@ struct ScriptingEngine::Impl {
             const int f = (flipX ? SDL_FLIP_HORIZONTAL : 0)
                         | (flipY ? SDL_FLIP_VERTICAL   : 0);
             s->flip = static_cast<SDL_FlipMode>(f);
+          }
+        });
+
+    // -- Animation API --------------------------------------------------------
+    // world.add_animation(e, frames_table, frame_duration [, loop])
+    // frames_table: array of {x, y, w, h} sub-tables
+    w.set_function("add_animation",
+        [world](EntityId e, sol::table frames, float dur, sol::optional<bool> loop) {
+          auto &anim = world->AddComponent<AnimationComponent>(e);
+          anim.frameDuration = dur;
+          anim.loop = loop.value_or(true);
+          anim.frames.clear();
+          anim.frames.reserve(frames.size());
+          for (std::size_t i = 1; i <= frames.size(); ++i) {
+            sol::table f = frames[i];
+            anim.frames.push_back(SDL_FRect{
+              f.get_or("x", 0.f),
+              f.get_or("y", 0.f),
+              f.get_or("w", 0.f),
+              f.get_or("h", 0.f),
+            });
+          }
+          // Initialise SpriteComponent srcRect to frame 0 immediately
+          if (!anim.frames.empty())
+            if (auto *s = world->GetComponent<SpriteComponent>(e))
+              s->srcRect = anim.frames[0];
+        });
+
+    w.set_function("set_animation_playing",
+        [world](EntityId e, bool playing) {
+          if (auto *a = world->GetComponent<AnimationComponent>(e))
+            a->playing = playing;
+        });
+
+    w.set_function("reset_animation",
+        [world](EntityId e) {
+          if (auto *a = world->GetComponent<AnimationComponent>(e)) {
+            a->currentFrame = 0;
+            a->timer = 0.f;
+            a->playing = true;
+            if (auto *s = world->GetComponent<SpriteComponent>(e))
+              if (!a->frames.empty()) s->srcRect = a->frames[0];
           }
         });
     // -------------------------------------------------------------------------
@@ -255,9 +293,6 @@ struct ScriptingEngine::Impl {
   }
 
   void BindTextures(TextureManager *textures) {
-    // sol2's develop branch on GCC 16 fatally misdeduces any lambda returning a
-    // raw pointer (SDL_Texture* ~ char*) — wrapper<char*> lacks function_pointer_type.
-    // Workaround: register engine.load_texture as a plain lua_CFunction closure.
     lua_State *L = lua.lua_state();
     SetRawFunction(L, "engine", "load_texture",
       [](lua_State *L_) -> int {

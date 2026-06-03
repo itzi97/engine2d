@@ -39,15 +39,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3_ttf)
 
 # -- SDL3_image ---------------------------------------------------------------
-# We only need PNG (+ BMP/JPG as free extras via stb).
-# Disable every format that pulls in a vendored subproject with CMake quirks:
-#   AVIF  -> dav1d  -> requires NASM
-#   JXL   -> libjxl -> heavy
-#   TIF   -> libtiff vendored, then libwebp calls find_package(TIFF) which
-#            calls get_property(LOCATION) on the vendored target — forbidden
-#            by modern CMake (CMP0026). Disabling TIFF also stops libwebp
-#            from pulling that broken FindTIFF path.
-#   WEBP  -> libwebp vendored, triggers the FindTIFF LOCATION crash above.
 set(SDLIMAGE_VENDORED  TRUE  CACHE BOOL "" FORCE)
 set(SDLIMAGE_AVIF      OFF   CACHE BOOL "" FORCE)
 set(SDLIMAGE_JXL       OFF   CACHE BOOL "" FORCE)
@@ -166,6 +157,7 @@ set(ENGINE_SOURCES
     src/ecs/World.cpp
     src/ecs/components/KinematicComponent.cpp
     src/ecs/components/SpriteComponent.cpp
+    src/ecs/systems/AnimationSystem.cpp
     src/ecs/systems/CollisionSystem.cpp
     src/ecs/systems/PhysicsSystem.cpp
     src/ecs/systems/RenderSystem.cpp
