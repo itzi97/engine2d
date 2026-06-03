@@ -1,8 +1,10 @@
 #include "audio/AudioManager.hpp"
 
-// stb_vorbis header (implementation is in stb_vorbis_impl.c)
+// stb_vorbis implementation is compiled in stb_vorbis_impl.c;
+// include as header-only here to get the declarations.
 #define STB_VORBIS_NO_PUSHDATA_API
-#include "stb_vorbis.h"
+#define STB_VORBIS_HEADER_ONLY
+#include "stb_vorbis.c"
 
 #include <SDL3/SDL.h>
 #include <cstring>

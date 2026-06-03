@@ -13,7 +13,7 @@ class World;
 class ScriptingEngine {
 public:
   ScriptingEngine();
-  ~ScriptingEngine();
+  ~ScriptingEngine(); // out-of-line so Impl is complete at destruction
 
   void BindWorld(World *world);
   void BindInput(InputManager *input);
@@ -27,4 +27,8 @@ public:
   void CallOnUpdate(float dt);
   bool RunScript(const std::filesystem::path &path);
   bool RunString(std::string_view src, std::string_view chunkName = "?");
+
+private:
+  struct Impl;                    // defined in ScriptingEngine.cpp
+  std::unique_ptr<Impl> m_impl;
 };
