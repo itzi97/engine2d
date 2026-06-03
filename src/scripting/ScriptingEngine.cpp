@@ -96,13 +96,22 @@ struct ScriptingEngine::Impl {
                      if (auto *k = world->GetComponent<KinematicComponent>(e))
                        k->acceleration = {ax, ay};
                    });
+    // add_sprite(entity, r, g, b, a [, layer=0])
     w.set_function("add_sprite",
-                   [world](EntityId e, int r, int g, int b, int a) {
+                   [world](EntityId e, int r, int g, int b, int a,
+                           sol::optional<int> layer) {
                      world->AddComponent<SpriteComponent>(
                          e,
                          SDL_Color{static_cast<Uint8>(r), static_cast<Uint8>(g),
                                    static_cast<Uint8>(b),
-                                   static_cast<Uint8>(a)});
+                                   static_cast<Uint8>(a)},
+                         layer.value_or(0));
+                   });
+    // set_layer(entity, layer) -- change draw order after creation
+    w.set_function("set_layer",
+                   [world](EntityId e, int layer) {
+                     if (auto *s = world->GetComponent<SpriteComponent>(e))
+                       s->layer = layer;
                    });
     w.set_function("add_tag",
                    [world](EntityId e, const std::string &tag) {
