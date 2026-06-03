@@ -52,9 +52,6 @@ struct PackedStorage final : IComponentStorage {
       fn(entities[i], components[i]);
   }
 
-  // Iterate in ascending T::layer order.
-  // sortOrder is a cached index buffer: resized and refilled in place each
-  // call, so no heap allocation after the first render pass per storage.
   template <typename Fn>
   void ForEachSorted(Fn &&fn) {
     const size_t n = entities.size();
@@ -106,7 +103,7 @@ struct PackedStorage final : IComponentStorage {
   std::vector<T>                       components;
   std::vector<EntityId>                entities;
   std::unordered_map<EntityId, size_t> index;
-  std::vector<size_t>                  sortOrder; // reused across frames
+  std::vector<size_t>                  sortOrder;
 };
 
 // ---------------------------------------------------------------------------
@@ -131,8 +128,6 @@ public:
   World(const World &)            = delete;
   World &operator=(const World &) = delete;
 
-  // ---- Entity lifetime ----------------------------------------------------
-
   [[nodiscard]] EntityId CreateEntity() {
     if (!m_freeList.empty()) {
       const EntityId id = m_freeList.front();
@@ -155,7 +150,6 @@ public:
     m_pendingDestroy.clear();
   }
 
-  // Wipe every entity and component. Only call from a scene-transition point.
   void ClearAll() {
     for (auto &[type, storage] : m_storages)
       storage->Clear();
@@ -164,8 +158,6 @@ public:
     m_collisions.clear();
     m_nextId = 0;
   }
-
-  // ---- Component access ---------------------------------------------------
 
   template <ComponentType T, typename... Args>
   T &AddComponent(EntityId entity, Args &&...args) {
@@ -186,8 +178,6 @@ public:
     it->second->Erase(entity);
   }
 
-  // ---- Iteration ----------------------------------------------------------
-
   template <ComponentType T, typename Fn>
   void ForEach(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -195,8 +185,6 @@ public:
     static_cast<PackedStorage<T> *>(it->second.get())->ForEach(std::forward<Fn>(fn));
   }
 
-  // Visits all T components in ascending T::layer order.
-  // No heap allocation after the first call — sortOrder is reused in place.
   template <ComponentType T, typename Fn>
   void ForEachSorted(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -213,8 +201,6 @@ public:
              std::span<const EntityId>{s->entities} };
   }
 
-  // ---- Collision results --------------------------------------------------
-
   void ClearCollisions() { m_collisions.clear(); }
   void AddCollision(Collision c) { m_collisions.push_back(c); }
 
@@ -230,19 +216,10 @@ public:
     return result;
   }
 
+  // Implemented in World.cpp (requires TagComponent.hpp)
   [[nodiscard]] std::vector<Collision>
-  GetCollisionsTagged(const std::string &tag) const {
-    std::vector<Collision> result;
-    for (const auto &c : m_collisions) {
-      const auto *ta = const_cast<World *>(this)->GetComponent<TagComponent>(c.a);
-      const auto *tb = const_cast<World *>(this)->GetComponent<TagComponent>(c.b);
-      if ((ta && ta->tag == tag) || (tb && tb->tag == tag))
-        result.push_back(c);
-    }
-    return result;
-  }
+  GetCollisionsTagged(const std::string &tag) const;
 
-  // ---- Frame entry points -------------------------------------------------
   void Update(float deltaTime);
   void RunCollision();
   void Render(SDL_Renderer *renderer);
