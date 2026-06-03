@@ -12,7 +12,7 @@ include(cmake/EmbedScript.cmake)
 # Game selection
 # ---------------------------------------------------------------------------
 set(GAME "snake" CACHE STRING "Game script to embed (filename without .lua)")
-set_property(CACHE GAME PROPERTY STRINGS snake breakout)
+set_property(CACHE GAME PROPERTY STRINGS snake breakout sprite_test)
 
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/scripts/${GAME}.lua")
   message(FATAL_ERROR "Game script not found: scripts/${GAME}.lua")
