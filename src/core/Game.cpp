@@ -6,8 +6,19 @@
 
 #include <SDL3/SDL.h>
 
-// Embed the selected game script as a C string at compile time.
-#include "game_script.h"
+// EmbedScript.cmake generates:
+//   build/generated/embedded_<GAME>.hpp
+// containing:
+//   namespace embedded { inline constexpr char <GAME>[] = "...lua source..."; }
+//
+// GAME_SCRIPT_NAME is set by CMake as a compile definition (e.g. "snake").
+// We use the X-macro trick to build the include path and symbol at compile time.
+#define EMBED_HEADER2(name) #name
+#define EMBED_HEADER(name)  EMBED_HEADER2(embedded_ ## name ## .hpp)
+#include EMBED_HEADER(GAME_SCRIPT_NAME)
+
+#define EMBED_SOURCE2(name) embedded::name
+#define EMBED_SOURCE(name)  EMBED_SOURCE2(name)
 
 Game::Game() = default;
 Game::~Game() = default;
@@ -30,14 +41,14 @@ bool Game::Init() {
     return false;
   }
 
-  m_world        = std::make_unique<World>();
-  m_input        = std::make_unique<InputManager>();
-  m_scripting    = std::make_unique<ScriptingEngine>();
+  m_world     = std::make_unique<World>();
+  m_input     = std::make_unique<InputManager>();
+  m_scripting = std::make_unique<ScriptingEngine>();
 
   m_scripting->BindWorld(m_world.get());
   m_scripting->BindInput(m_input.get());
 
-  if (!m_scripting->RunString(GAME_SCRIPT_SOURCE, GAME_SCRIPT_NAME)) {
+  if (!m_scripting->RunString(EMBED_SOURCE(GAME_SCRIPT_NAME), GAME_SCRIPT_NAME)) {
     SDL_Log("Failed to load game script: %s", GAME_SCRIPT_NAME);
     return false;
   }
@@ -48,13 +59,12 @@ bool Game::Init() {
 void Game::Run() {
   using namespace std::chrono;
   auto previous = steady_clock::now();
-  constexpr double kMaxDt = 1.0 / 20.0;  // clamp to 50 ms to avoid spiral of death
+  constexpr double kMaxDt = 1.0 / 20.0;
 
   while (m_running) {
-    const auto now     = steady_clock::now();
-    const double dt    = std::min(
-        duration<double>(now - previous).count(), kMaxDt);
-    previous           = now;
+    const auto   now = steady_clock::now();
+    const double dt  = std::min(duration<double>(now - previous).count(), kMaxDt);
+    previous         = now;
 
     // 1. Input
     m_input->BeginFrame();
