@@ -52,23 +52,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SDL3_image)
 
-# -- SDL3_mixer ---------------------------------------------------------------
-set(SDLMIXER_VENDORED   TRUE  CACHE BOOL "" FORCE)
-set(SDLMIXER_FLAC       OFF   CACHE BOOL "" FORCE)
-set(SDLMIXER_MOD        OFF   CACHE BOOL "" FORCE)
-set(SDLMIXER_MP3        OFF   CACHE BOOL "" FORCE)
-set(SDLMIXER_MIDI       OFF   CACHE BOOL "" FORCE)
-set(SDLMIXER_OPUS       OFF   CACHE BOOL "" FORCE)
-set(SDLMIXER_WAVPACK    OFF   CACHE BOOL "" FORCE)
-set(SDLMIXER_OGG        ON    CACHE BOOL "" FORCE)
-FetchContent_Declare(
-    SDL3_mixer
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
-    GIT_TAG        release-3.2.4
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(SDL3_mixer)
-
 # -- GLM ----------------------------------------------------------------------
 FetchContent_Declare(
     glm
@@ -136,6 +119,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# -- stb_vorbis (header-only, OGG decode) ------------------------------------
+# We vendor a single-header stb_vorbis for OGG loading since SDL3 only
+# ships with WAV support built-in.
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(stb)
+
 # -- DejaVu Sans font ---------------------------------------------------------
 set(FONT_DIR  "${CMAKE_SOURCE_DIR}/assets/fonts")
 set(FONT_FILE "${FONT_DIR}/DejaVuSans.ttf")
@@ -172,6 +166,7 @@ set(ENGINE_SOURCES
     src/main.cpp
     src/core/Game.cpp
     src/audio/AudioManager.cpp
+    src/audio/stb_vorbis_impl.c
     src/ecs/World.cpp
     src/ecs/components/KinematicComponent.cpp
     src/ecs/components/SpriteComponent.cpp
@@ -194,6 +189,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${GENERATED_DIR}"
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
+    "${stb_SOURCE_DIR}"
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
@@ -204,7 +200,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
     SDL3_image::SDL3_image
-    SDL3_mixer::SDL3_mixer
     glm::glm
     nlohmann_json::nlohmann_json
     sol2

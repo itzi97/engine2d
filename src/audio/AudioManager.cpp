@@ -1,78 +1,232 @@
 #include "audio/AudioManager.hpp"
-#include <SDL3/SDL.h>
-#include <iostream>
 
-static constexpr int   kMixFrequency = MIX_DEFAULT_FREQUENCY;
-static constexpr int   kMixChannels  = 8; // simultaneous SFX channels
+// stb_vorbis header (implementation is in stb_vorbis_impl.c)
+#define STB_VORBIS_NO_PUSHDATA_API
+#include "stb_vorbis.h"
+
+#include <SDL3/SDL.h>
+#include <cstring>
+#include <iostream>
+#include <algorithm>
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+bool AudioManager::LoadOgg(const std::string &path, AudioClip &out) {
+  int channels = 0, sampleRate = 0;
+  float *decoded = nullptr;
+  const int frames = stb_vorbis_decode_filename(
+      path.c_str(), &channels, &sampleRate, &decoded);
+  if (frames <= 0 || !decoded) {
+    std::cerr << "[AudioManager] stb_vorbis failed: '" << path << "'\n";
+    return false;
+  }
+  const size_t total = static_cast<size_t>(frames * channels);
+  out.samples.assign(decoded, decoded + total);
+  out.channels    = channels;
+  out.sampleRate  = sampleRate;
+  free(decoded);
+  return true;
+}
+
+bool AudioManager::LoadWav(const std::string &path, AudioClip &out) {
+  SDL_AudioSpec spec{};
+  Uint8 *buf = nullptr;
+  Uint32 len = 0;
+  if (!SDL_LoadWAV(path.c_str(), &spec, &buf, &len)) {
+    std::cerr << "[AudioManager] SDL_LoadWAV failed: '" << path
+              << "': " << SDL_GetError() << '\n';
+    return false;
+  }
+  // Convert to float32 via a temporary stream
+  SDL_AudioSpec dst{SDL_AUDIO_F32, spec.channels, spec.freq};
+  SDL_AudioStream *cvt = SDL_CreateAudioStream(&spec, &dst);
+  SDL_PutAudioStreamData(cvt, buf, static_cast<int>(len));
+  SDL_FlushAudioStream(cvt);
+  SDL_free(buf);
+
+  const int avail = SDL_GetAudioStreamAvailable(cvt);
+  out.samples.resize(static_cast<size_t>(avail) / sizeof(float));
+  SDL_GetAudioStreamData(cvt, out.samples.data(), avail);
+  SDL_DestroyAudioStream(cvt);
+
+  out.channels   = spec.channels;
+  out.sampleRate = spec.freq;
+  return true;
+}
+
+bool AudioManager::LoadClip(const std::string &path, AudioClip &out) {
+  // Dispatch by extension
+  const auto dot = path.rfind('.');
+  if (dot != std::string::npos) {
+    std::string ext = path.substr(dot + 1);
+    for (auto &c : ext) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    if (ext == "ogg") return LoadOgg(path, out);
+    if (ext == "wav") return LoadWav(path, out);
+  }
+  // Fallback: try WAV then OGG
+  return LoadWav(path, out) || LoadOgg(path, out);
+}
+
+// ---------------------------------------------------------------------------
+// Init / shutdown
+// ---------------------------------------------------------------------------
 
 AudioManager::AudioManager() {
-  if (Mix_Init(MIX_INIT_OGG) == 0) {
-    std::cerr << "[AudioManager] Mix_Init failed: " << SDL_GetError() << '\n';
-    return;
+  // Open the default playback device with float32 stereo at 44100 Hz.
+  m_spec = {SDL_AUDIO_F32, 2, 44100};
+  m_deviceId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &m_spec);
+  if (m_deviceId == 0) {
+    std::cerr << "[AudioManager] SDL_OpenAudioDevice failed: "
+              << SDL_GetError() << '\n';
   }
-  if (!Mix_OpenAudio(0, nullptr)) {
-    std::cerr << "[AudioManager] Mix_OpenAudio failed: " << SDL_GetError() << '\n';
-    Mix_Quit();
-    return;
-  }
-  Mix_AllocateChannels(kMixChannels);
-  m_ready = true;
 }
 
 AudioManager::~AudioManager() {
-  for (auto &[id, chunk] : m_sfx)   Mix_FreeChunk(chunk);
-  for (auto &[id, music] : m_music) Mix_FreeMusic(music);
-  if (m_ready) {
-    Mix_CloseAudio();
-    Mix_Quit();
+  if (m_musicStream) {
+    SDL_DestroyAudioStream(m_musicStream);
+    m_musicStream = nullptr;
+  }
+  if (m_deviceId) {
+    SDL_CloseAudioDevice(m_deviceId);
+    m_deviceId = 0;
   }
 }
 
+// ---------------------------------------------------------------------------
+// SFX
+// ---------------------------------------------------------------------------
+
 int AudioManager::LoadSfx(const std::string &path) {
-  Mix_Chunk *chunk = Mix_LoadWAV(path.c_str());
-  if (!chunk) {
-    std::cerr << "[AudioManager] LoadSfx failed ('" << path << "'): "
-              << SDL_GetError() << '\n';
-    return -1;
-  }
-  const int id  = m_nextSfxId++;
-  m_sfx[id]     = chunk;
+  AudioClip clip;
+  if (!LoadClip(path, clip)) return -1;
+  const int id   = m_nextSfxId++;
+  m_sfxClips[id] = std::move(clip);
   return id;
 }
 
 void AudioManager::PlaySfx(int handle, float volume) {
-  const auto it = m_sfx.find(handle);
-  if (it == m_sfx.end()) return;
-  // volume 0.0-1.0 -> 0-128
-  Mix_VolumeChunk(it->second,
-      static_cast<int>(volume * static_cast<float>(MIX_MAX_VOLUME)));
-  Mix_PlayChannel(-1, it->second, 0); // -1 = first free channel
+  const auto it = m_sfxClips.find(handle);
+  if (it == m_sfxClips.end()) return;
+
+  const AudioClip &clip = it->second;
+  SDL_AudioSpec src{SDL_AUDIO_F32, clip.channels, clip.sampleRate};
+
+  SDL_AudioStream *stream = SDL_CreateAudioStream(&src, &m_spec);
+  if (!stream) return;
+
+  // Apply volume by scaling samples into a temp buffer
+  std::vector<float> buf = clip.samples;
+  const float v = std::clamp(volume, 0.f, 1.f);
+  for (auto &s : buf) s *= v;
+
+  SDL_PutAudioStreamData(stream, buf.data(),
+      static_cast<int>(buf.size() * sizeof(float)));
+  SDL_FlushAudioStream(stream);
+  SDL_BindAudioStream(m_deviceId, stream);
+  // SDL takes ownership and will free after playback drains
+  SDL_SetAudioStreamPutCallback(stream, [](void *ud, SDL_AudioStream *s, int, int avail) {
+    if (avail == 0) {
+      SDL_UnbindAudioStream(s);
+      SDL_DestroyAudioStream(s);
+    }
+  }, nullptr);
 }
 
+// ---------------------------------------------------------------------------
+// Music
+// ---------------------------------------------------------------------------
+
 int AudioManager::LoadMusic(const std::string &path) {
-  Mix_Music *music = Mix_LoadMUS(path.c_str());
-  if (!music) {
-    std::cerr << "[AudioManager] LoadMusic failed ('" << path << "'): "
-              << SDL_GetError() << '\n';
-    return -1;
-  }
-  const int id   = m_nextMusicId++;
-  m_music[id]    = music;
+  AudioClip clip;
+  if (!LoadClip(path, clip)) return -1;
+  const int id     = m_nextMusicId++;
+  m_musicClips[id] = std::move(clip);
   return id;
 }
 
-void AudioManager::PlayMusic(int handle, bool loop) {
-  const auto it = m_music.find(handle);
-  if (it == m_music.end()) return;
-  m_currentMusic = handle;
-  Mix_PlayMusic(it->second, loop ? -1 : 1); // -1 = loop forever, 1 = play once
+void AudioManager::AudioCallback(void *userdata, SDL_AudioStream *stream,
+                                 int additionalAmount, int /*totalAmount*/) {
+  static_cast<AudioManager *>(userdata)->FeedMusic(stream, additionalAmount);
 }
 
-void AudioManager::PauseMusic()  { Mix_PauseMusic(); }
-void AudioManager::ResumeMusic() { Mix_ResumeMusic(); }
-void AudioManager::StopMusic()   { Mix_HaltMusic(); }
+void AudioManager::FeedMusic(SDL_AudioStream *stream, int additionalAmount) {
+  if (m_currentMusic < 0) return;
+  const auto it = m_musicClips.find(m_currentMusic);
+  if (it == m_musicClips.end()) return;
+
+  const AudioClip &clip    = it->second;
+  const size_t    total    = clip.samples.size();
+  int             remaining = additionalAmount;
+
+  while (remaining > 0) {
+    const size_t floatsNeeded =
+        static_cast<size_t>(remaining) / sizeof(float);
+    const size_t floatsAvail  = total - m_musicPos;
+
+    if (floatsAvail == 0) {
+      if (!m_musicLoop) break;
+      m_musicPos = 0;
+      continue;
+    }
+
+    const size_t chunk = std::min(floatsNeeded, floatsAvail);
+
+    // Apply volume
+    std::vector<float> buf(chunk);
+    for (size_t i = 0; i < chunk; ++i)
+      buf[i] = clip.samples[m_musicPos + i] * m_musicVolume;
+
+    SDL_PutAudioStreamData(stream, buf.data(),
+        static_cast<int>(chunk * sizeof(float)));
+    m_musicPos += chunk;
+    remaining  -= static_cast<int>(chunk * sizeof(float));
+  }
+}
+
+void AudioManager::PlayMusic(int handle, bool loop) {
+  if (m_musicStream) {
+    SDL_UnbindAudioStream(m_musicStream);
+    SDL_DestroyAudioStream(m_musicStream);
+    m_musicStream = nullptr;
+  }
+
+  const auto it = m_musicClips.find(handle);
+  if (it == m_musicClips.end()) return;
+
+  const AudioClip &clip = it->second;
+  SDL_AudioSpec src{SDL_AUDIO_F32, clip.channels, clip.sampleRate};
+
+  m_musicStream = SDL_CreateAudioStream(&src, &m_spec);
+  if (!m_musicStream) return;
+
+  m_currentMusic = handle;
+  m_musicLoop    = loop;
+  m_musicPos     = 0;
+
+  SDL_SetAudioStreamGetCallback(m_musicStream, AudioCallback, this);
+  SDL_BindAudioStream(m_deviceId, m_musicStream);
+}
+
+void AudioManager::PauseMusic() {
+  if (m_musicStream) SDL_PauseAudioStreamDevice(m_musicStream);
+}
+
+void AudioManager::ResumeMusic() {
+  if (m_musicStream) SDL_ResumeAudioStreamDevice(m_musicStream);
+}
+
+void AudioManager::StopMusic() {
+  if (m_musicStream) {
+    SDL_UnbindAudioStream(m_musicStream);
+    SDL_DestroyAudioStream(m_musicStream);
+    m_musicStream  = nullptr;
+    m_currentMusic = -1;
+    m_musicPos     = 0;
+  }
+}
 
 void AudioManager::SetMusicVolume(float volume) {
-  Mix_VolumeMusic(
-      static_cast<int>(volume * static_cast<float>(MIX_MAX_VOLUME)));
+  m_musicVolume = std::clamp(volume, 0.f, 1.f);
 }
