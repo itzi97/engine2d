@@ -2,10 +2,6 @@
 
 #include "ecs/Component.hpp"
 #include "ecs/Entity.hpp"
-#include "ecs/components/KinematicComponent.hpp"
-#include "ecs/components/SpriteComponent.hpp"
-#include "ecs/components/TagComponent.hpp"
-#include "ecs/components/TransformComponent.hpp"
 
 #include <algorithm>
 #include <memory>
