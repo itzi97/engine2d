@@ -223,15 +223,33 @@ struct ScriptingEngine::Impl {
   }
 
   void BindTextures(TextureManager *textures) {
-    auto eng = lua["engine"];
-    // sol2 on GCC 16+ misdeduces lambdas that return raw non-class pointers
-    // (e.g. SDL_Texture* ~ char*) as pointer-to-value rather than callables.
-    // sol::as_function forces the correct callable treatment.
-    using LoadFn = std::function<SDL_Texture*(const std::string&)>;
-    LoadFn loadFn = [textures](const std::string &path) -> SDL_Texture* {
-      return textures->Load(path);
-    };
-    eng.set_function("load_texture", sol::as_function(std::move(loadFn)));
+    // sol2's develop branch on GCC 16 fatally misdeduces any lambda returning a
+    // raw pointer (SDL_Texture* / char*) — wrapper<char*> lacks function_pointer_type.
+    // Neither sol::as_function nor std::function erasure helps because the trait
+    // resolution happens before those wrappers kick in.
+    // Workaround: register engine.load_texture as a plain lua_CFunction closure
+    // using the raw Lua C API, completely bypassing sol2's type machinery.
+    lua_State *L = lua.lua_state();
+
+    // Push the TextureManager* as an upvalue
+    lua_pushlightuserdata(L, static_cast<void *>(textures));
+    lua_pushcclosure(L, [](lua_State *L_) -> int {
+      auto *mgr = static_cast<TextureManager *>(lua_touserdata(L_, lua_upvalueindex(1)));
+      const char *path = luaL_checkstring(L_, 1);
+      SDL_Texture *tex = mgr->Load(std::string(path));
+      if (tex)
+        lua_pushlightuserdata(L_, static_cast<void *>(tex));
+      else
+        lua_pushnil(L_);
+      return 1;
+    }, 1);
+
+    // Store it as engine.load_texture
+    // Stack: [..., closure]
+    lua_getglobal(L, "engine");           // [..., closure, engine_table]
+    lua_insert(L, -2);                    // [..., engine_table, closure]
+    lua_setfield(L, -2, "load_texture"); // engine.load_texture = closure
+    lua_pop(L, 1);                        // pop engine_table
   }
 };
 
