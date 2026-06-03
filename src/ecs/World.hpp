@@ -19,6 +19,11 @@ public:
   World &operator=(const World &) = delete;
 
   [[nodiscard]] EntityId CreateEntity() { return Entity::Create(); }
+  void DestroyEntity(EntityId entity) {
+    for (auto &[type, storage] : m_storages) {
+      storage.erase(entity);
+    }
+  }
 
   template <typename T, typename... Args>
   T &AddComponent(EntityId entity, Args &&...args) {

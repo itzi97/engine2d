@@ -170,6 +170,11 @@ void Game::UpdateSnakeStep() {
 }
 
 void Game::SpawnFood() {
+
+  if (m_food != 0) {
+    m_world->DestroyEntity(m_food);
+  }
+
   m_food = m_world->CreateEntity();
 
   auto &t = m_world->AddComponent<TransformComponent>(m_food);
