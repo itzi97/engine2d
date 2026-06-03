@@ -19,16 +19,15 @@ static bool Overlaps(const TransformComponent &a, const TransformComponent &b) {
 void CollisionSystem::Update(World &world) {
   s_collisions.clear();
 
-  auto *storage = world.GetStorage<TransformComponent>();
-  if (!storage) return;
+  // View<T> gives a read-only span pair over the packed arrays —
+  // O(n^2) index loop without exposing raw storage.
+  const auto view = world.View<TransformComponent>();
+  const size_t n  = view.size();
 
-  const size_t n = storage->entities.size();
-  for (size_t i = 0; i < n; ++i) {
-    for (size_t j = i + 1; j < n; ++j) {
-      if (Overlaps(storage->components[i], storage->components[j]))
-        s_collisions.push_back({storage->entities[i], storage->entities[j]});
-    }
-  }
+  for (size_t i = 0; i < n; ++i)
+    for (size_t j = i + 1; j < n; ++j)
+      if (Overlaps(view.components[i], view.components[j]))
+        s_collisions.push_back({view.entities[i], view.entities[j]});
 }
 
 const std::vector<Collision> &CollisionSystem::GetCollisions() {
@@ -43,7 +42,7 @@ std::vector<Collision> CollisionSystem::GetCollisionsFor(EntityId entity) {
   return result;
 }
 
-std::vector<Collision> CollisionSystem::GetCollisionsTagged(World        &world,
+std::vector<Collision> CollisionSystem::GetCollisionsTagged(World &world,
                                                              const std::string &tag) {
   std::vector<Collision> result;
   for (const auto &c : s_collisions) {

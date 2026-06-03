@@ -7,8 +7,11 @@
 #include "ecs/components/TagComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
 
+#include <algorithm>
 #include <memory>
+#include <numeric>
 #include <queue>
+#include <span>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
@@ -30,14 +33,10 @@ template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
   template <typename Fn>
   void ForEach(Fn &&fn) {
-    // Iterate by index so in-loop Erase via swap-and-pop is safe:
-    // we re-visit the swapped element by not advancing past it.
     for (size_t i = 0; i < entities.size(); ) {
       const EntityId e = entities[i];
       fn(e, components[i]);
-      // Advance only if fn didn't erase this slot (entity still at slot i).
-      if (i < entities.size() && entities[i] == e)
-        ++i;
+      if (i < entities.size() && entities[i] == e) ++i;
     }
   }
 
@@ -63,26 +62,32 @@ struct PackedStorage final : IComponentStorage {
   void Erase(EntityId entity) override {
     const auto it = index.find(entity);
     if (it == index.end()) return;
-
     const size_t slot = it->second;
     const size_t last = components.size() - 1;
-
     if (slot != last) {
       components[slot]      = std::move(components[last]);
       entities[slot]        = entities[last];
       index[entities[slot]] = slot;
     }
-
     components.pop_back();
     entities.pop_back();
     index.erase(entity);
   }
 
-  // Direct array access — for systems that need two-storage joins.
-  // Prefer ForEach for single-storage iteration.
   std::vector<T>                       components;
   std::vector<EntityId>                entities;
   std::unordered_map<EntityId, size_t> index;
+};
+
+// ---------------------------------------------------------------------------
+// ComponentView<T>  --  read-only span pair returned by World::View<T>()
+// ---------------------------------------------------------------------------
+template <ComponentType T>
+struct ComponentView {
+  std::span<const T>        components;
+  std::span<const EntityId> entities;
+  [[nodiscard]] size_t size() const noexcept { return entities.size(); }
+  [[nodiscard]] bool   empty() const noexcept { return entities.empty(); }
 };
 
 // ---------------------------------------------------------------------------
@@ -114,8 +119,7 @@ public:
   }
 
   // Flush all pending DestroyEntity calls.
-  // Called by Game::Run after Update + CallOnUpdate + RunCollision,
-  // so no system is iterating storage when erasure happens.
+  // Called by Game::Run after Update + CallOnUpdate + RunCollision.
   void FlushDestroyQueue() {
     for (const EntityId e : m_pendingDestroy) {
       for (auto &[type, storage] : m_storages)
@@ -146,13 +150,48 @@ public:
     it->second->Erase(entity);
   }
 
+  // ---- Iteration ----------------------------------------------------------
+
   // Iterate all entities that have component T.
-  // Safe to call DestroyEntity inside fn — destruction is deferred.
+  // Safe to call DestroyEntity inside fn (destruction is deferred).
   template <ComponentType T, typename Fn>
   void ForEach(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
     if (it == m_storages.end()) return;
     static_cast<PackedStorage<T> *>(it->second.get())->ForEach(std::forward<Fn>(fn));
+  }
+
+  // Iterate all entities that have component T, visited in ascending order
+  // of T::layer. Allocates a temporary index vector per call; use for render
+  // passes only, not hot simulation loops.
+  // Fn signature: void(EntityId, T &)
+  template <ComponentType T, typename Fn>
+  void ForEachSorted(Fn &&fn) {
+    const auto it = m_storages.find(std::type_index(typeid(T)));
+    if (it == m_storages.end()) return;
+    auto *storage = static_cast<PackedStorage<T> *>(it->second.get());
+    const size_t n = storage->entities.size();
+    if (n == 0) return;
+
+    std::vector<size_t> order(n);
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+      return storage->components[a].layer < storage->components[b].layer;
+    });
+    for (const size_t i : order)
+      fn(storage->entities[i], storage->components[i]);
+  }
+
+  // Return a read-only view (span pair) over T's packed arrays.
+  // Intended for systems that need direct index access (e.g. O(n^2) collision).
+  // The spans are invalidated by any AddComponent<T> or FlushDestroyQueue call.
+  template <ComponentType T>
+  [[nodiscard]] ComponentView<T> View() {
+    const auto it = m_storages.find(std::type_index(typeid(T)));
+    if (it == m_storages.end()) return {};
+    auto *s = static_cast<PackedStorage<T> *>(it->second.get());
+    return { std::span<const T>{s->components},
+             std::span<const EntityId>{s->entities} };
   }
 
   // ---- Frame entry points (called by Game::Run) ---------------------------
@@ -176,18 +215,6 @@ private:
     m_storages.emplace(key, std::move(storage));
     return *ptr;
   }
-
-  // GetStorage<T>() is private. Systems use World::ForEach or GetComponent.
-  // TextSystem needs direct storage access for layer sorting — granted via friend.
-  template <ComponentType T>
-  [[nodiscard]] PackedStorage<T> *GetStorage() {
-    const auto it = m_storages.find(std::type_index(typeid(T)));
-    if (it == m_storages.end()) return nullptr;
-    return static_cast<PackedStorage<T> *>(it->second.get());
-  }
-
-  friend struct TextSystem;
-  friend struct RenderSystem;
-  friend struct CollisionSystem;
-  friend struct PhysicsSystem;
+  // No friend declarations needed: all system access goes through
+  // ForEach, ForEachSorted, View, GetComponent, AddComponent.
 };
