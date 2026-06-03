@@ -90,6 +90,10 @@ void Game::Run() {
   float accumulator = 0.f;
 
   while (running) {
+    // Snapshot previous input state BEFORE polling new events so that
+    // IsKeyJustPressed / IsKeyJustReleased compare this frame against last.
+    m_input->EndFrame();
+
     const auto  now = steady_clock::now();
     const float raw = static_cast<float>(
         duration<double>(now - previous).count());
@@ -105,7 +109,6 @@ void Game::Run() {
       accumulator -= kFixedDt;
     }
 
-    m_input->EndFrame();
     Render();
   }
 }
