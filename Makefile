@@ -85,51 +85,6 @@ rebuild_cache:
 rebuild_cache/fast: rebuild_cache
 .PHONY : rebuild_cache/fast
 
-# Special rule for the target list_install_components
-list_install_components:
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Available install components are: \"Unspecified\""
-.PHONY : list_install_components
-
-# Special rule for the target list_install_components
-list_install_components/fast: list_install_components
-.PHONY : list_install_components/fast
-
-# Special rule for the target install
-install: preinstall
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Install the project..."
-	/usr/bin/cmake -P cmake_install.cmake
-.PHONY : install
-
-# Special rule for the target install
-install/fast: preinstall/fast
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Install the project..."
-	/usr/bin/cmake -P cmake_install.cmake
-.PHONY : install/fast
-
-# Special rule for the target install/local
-install/local: preinstall
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Installing only the local directory..."
-	/usr/bin/cmake -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake
-.PHONY : install/local
-
-# Special rule for the target install/local
-install/local/fast: preinstall/fast
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Installing only the local directory..."
-	/usr/bin/cmake -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake
-.PHONY : install/local/fast
-
-# Special rule for the target install/strip
-install/strip: preinstall
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Installing the project stripped..."
-	/usr/bin/cmake -DCMAKE_INSTALL_DO_STRIP=1 -P cmake_install.cmake
-.PHONY : install/strip
-
-# Special rule for the target install/strip
-install/strip/fast: preinstall/fast
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Installing the project stripped..."
-	/usr/bin/cmake -DCMAKE_INSTALL_DO_STRIP=1 -P cmake_install.cmake
-.PHONY : install/strip/fast
-
 # The main all target
 all: cmake_check_build_system
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/itziar/dev/engine2d/CMakeFiles /home/itziar/dev/engine2d//CMakeFiles/progress.marks
@@ -1252,30 +1207,6 @@ _deps/lua-src/ltablib.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/lua_static.dir/build.make CMakeFiles/lua_static.dir/_deps/lua-src/ltablib.c.s
 .PHONY : _deps/lua-src/ltablib.c.s
 
-_deps/lua-src/ltests.o: _deps/lua-src/ltests.c.o
-.PHONY : _deps/lua-src/ltests.o
-
-# target to build an object file
-_deps/lua-src/ltests.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/lua_static.dir/build.make CMakeFiles/lua_static.dir/_deps/lua-src/ltests.c.o
-.PHONY : _deps/lua-src/ltests.c.o
-
-_deps/lua-src/ltests.i: _deps/lua-src/ltests.c.i
-.PHONY : _deps/lua-src/ltests.i
-
-# target to preprocess a source file
-_deps/lua-src/ltests.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/lua_static.dir/build.make CMakeFiles/lua_static.dir/_deps/lua-src/ltests.c.i
-.PHONY : _deps/lua-src/ltests.c.i
-
-_deps/lua-src/ltests.s: _deps/lua-src/ltests.c.s
-.PHONY : _deps/lua-src/ltests.s
-
-# target to generate assembly for a file
-_deps/lua-src/ltests.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/lua_static.dir/build.make CMakeFiles/lua_static.dir/_deps/lua-src/ltests.c.s
-.PHONY : _deps/lua-src/ltests.c.s
-
 _deps/lua-src/ltm.o: _deps/lua-src/ltm.c.o
 .PHONY : _deps/lua-src/ltm.o
 
@@ -1499,10 +1430,6 @@ help:
 	@echo "... clean"
 	@echo "... depend"
 	@echo "... edit_cache"
-	@echo "... install"
-	@echo "... install/local"
-	@echo "... install/strip"
-	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... Continuous"
 	@echo "... ContinuousBuild"
@@ -1619,9 +1546,6 @@ help:
 	@echo "... _deps/lua-src/ltablib.o"
 	@echo "... _deps/lua-src/ltablib.i"
 	@echo "... _deps/lua-src/ltablib.s"
-	@echo "... _deps/lua-src/ltests.o"
-	@echo "... _deps/lua-src/ltests.i"
-	@echo "... _deps/lua-src/ltests.s"
 	@echo "... _deps/lua-src/ltm.o"
 	@echo "... _deps/lua-src/ltm.i"
 	@echo "... _deps/lua-src/ltm.s"

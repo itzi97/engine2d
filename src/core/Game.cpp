@@ -148,10 +148,23 @@ void Game::Render() {
 }
 
 void Game::UpdateSnakeStep() {
-  if (auto *t = m_world->GetComponent<TransformComponent>(m_snakeHead)) {
-    // velocity is a unit grid direction now
-    t->position.x += t->velocity.x * cellSize;
-    t->position.y += t->velocity.y * cellSize;
+  auto *headT = m_world->GetComponent<TransformComponent>(m_snakeHead);
+  if (headT) {
+    // Unit grid velocity
+    headT->position.x += headT->velocity.x * cellSize;
+    headT->position.y += headT->velocity.y * cellSize;
+  }
+
+  // Collision check with food
+  if (headT && m_food != 0) {
+    if (auto *foodT = m_world->GetComponent<TransformComponent>(m_food)) {
+      if (headT->position.x == foodT->position.x &&
+          headT->position.y == foodT->position.y) {
+        // TODO: grow snake later
+        std::cout << "[Game] Collission detected" << std::endl;
+        SpawnFood();
+      }
+    }
   }
 }
 
