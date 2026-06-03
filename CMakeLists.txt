@@ -95,6 +95,7 @@ set(ENGINE_SOURCES
     src/main.cpp
     src/core/Game.cpp
     src/ecs/World.cpp
+    src/ecs/components/KinematicComponent.cpp
     src/ecs/components/SpriteComponent.cpp
     src/scripting/ScriptingEngine.cpp
 )

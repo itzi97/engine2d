@@ -7,6 +7,7 @@
 
 #include "ecs/World.hpp"
 #include "ecs/Entity.hpp"
+#include "ecs/components/KinematicComponent.hpp"
 #include "ecs/components/SpriteComponent.hpp"
 #include "ecs/components/TagComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
@@ -41,42 +42,51 @@ struct ScriptingEngine::Impl {
       world->DestroyEntity(e);
     });
 
+    // Transform: position + size only, no velocity
     w.set_function("add_transform",
                    [world](EntityId e, float x, float y, float w_, float h_) {
-                     auto &t = world->AddComponent<TransformComponent>(e);
+                     auto &t    = world->AddComponent<TransformComponent>(e);
                      t.position = {x, y};
-                     t.size = {w_, h_};
-                     t.velocity = {0.f, 0.f};
+                     t.size     = {w_, h_};
                    });
 
     w.set_function("set_position",
                    [world](EntityId e, float x, float y) {
-                     if (auto *t =
-                             world->GetComponent<TransformComponent>(e))
+                     if (auto *t = world->GetComponent<TransformComponent>(e))
                        t->position = {x, y};
                    });
 
     w.set_function("get_position",
                    [world](EntityId e) -> std::tuple<float, float> {
-                     if (auto *t =
-                             world->GetComponent<TransformComponent>(e))
+                     if (auto *t = world->GetComponent<TransformComponent>(e))
                        return {t->position.x, t->position.y};
                      return {0.f, 0.f};
                    });
 
+    // Kinematic: velocity lives here now
+    w.set_function("add_kinematic",
+                   [world](EntityId e) {
+                     auto &k = world->AddComponent<KinematicComponent>(e, e);
+                     k.world = world;
+                   });
+
     w.set_function("set_velocity",
                    [world](EntityId e, float vx, float vy) {
-                     if (auto *t =
-                             world->GetComponent<TransformComponent>(e))
-                       t->velocity = {vx, vy};
+                     if (auto *k = world->GetComponent<KinematicComponent>(e))
+                       k->velocity = {vx, vy};
                    });
 
     w.set_function("get_velocity",
                    [world](EntityId e) -> std::tuple<float, float> {
-                     if (auto *t =
-                             world->GetComponent<TransformComponent>(e))
-                       return {t->velocity.x, t->velocity.y};
+                     if (auto *k = world->GetComponent<KinematicComponent>(e))
+                       return {k->velocity.x, k->velocity.y};
                      return {0.f, 0.f};
+                   });
+
+    w.set_function("set_acceleration",
+                   [world](EntityId e, float ax, float ay) {
+                     if (auto *k = world->GetComponent<KinematicComponent>(e))
+                       k->acceleration = {ax, ay};
                    });
 
     w.set_function("add_sprite",
@@ -155,8 +165,6 @@ bool ScriptingEngine::RunScript(const std::filesystem::path &path) {
 
 bool ScriptingEngine::RunString(std::string_view src, std::string_view chunkName) {
   lua_State *L = m_impl->lua.lua_state();
-
-  // '@' prefix tells Lua the chunk name is a filename for error messages.
   const std::string name = "@" + std::string(chunkName);
   const int loadErr = luaL_loadbuffer(L, src.data(), src.size(), name.c_str());
   if (loadErr != LUA_OK) {
@@ -165,12 +173,8 @@ bool ScriptingEngine::RunString(std::string_view src, std::string_view chunkName
     lua_pop(L, 1);
     return false;
   }
-
-  // luaL_loadbuffer pushed the compiled chunk onto the stack at index -1.
-  // Construct protected_function from (lua_State*, stack_index).
   sol::protected_function chunk(L, -1);
-  lua_pop(L, 1); // sol::protected_function copies the ref; pop the stack copy
-
+  lua_pop(L, 1);
   auto result = chunk();
   if (!result.valid()) {
     const sol::error err = result;
