@@ -20,7 +20,7 @@ struct ScriptingEngine::Impl {
 
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
-                       sol::lib::table, sol::lib::io);
+                       sol::lib::table, sol::lib::io, sol::lib::os);
     RegisterBaseBindings();
   }
 
@@ -109,14 +109,14 @@ struct ScriptingEngine::Impl {
 
     eng.set_function("is_key_pressed", [](const std::string &key) -> bool {
       const bool *keys = SDL_GetKeyboardState(nullptr);
-      if (key == "UP")    return keys[SDL_SCANCODE_UP];
-      if (key == "DOWN")  return keys[SDL_SCANCODE_DOWN];
-      if (key == "LEFT")  return keys[SDL_SCANCODE_LEFT];
-      if (key == "RIGHT") return keys[SDL_SCANCODE_RIGHT];
-      if (key == "W")     return keys[SDL_SCANCODE_W];
-      if (key == "S")     return keys[SDL_SCANCODE_S];
-      if (key == "A")     return keys[SDL_SCANCODE_A];
-      if (key == "D")     return keys[SDL_SCANCODE_D];
+      if (key == "UP")     return keys[SDL_SCANCODE_UP];
+      if (key == "DOWN")   return keys[SDL_SCANCODE_DOWN];
+      if (key == "LEFT")   return keys[SDL_SCANCODE_LEFT];
+      if (key == "RIGHT")  return keys[SDL_SCANCODE_RIGHT];
+      if (key == "W")      return keys[SDL_SCANCODE_W];
+      if (key == "S")      return keys[SDL_SCANCODE_S];
+      if (key == "A")      return keys[SDL_SCANCODE_A];
+      if (key == "D")      return keys[SDL_SCANCODE_D];
       if (key == "ESCAPE") return keys[SDL_SCANCODE_ESCAPE];
       return false;
     });
@@ -147,6 +147,18 @@ bool ScriptingEngine::RunScript(const std::filesystem::path &path) {
   if (!result.valid()) {
     const sol::error err = result;
     std::cerr << "[ScriptingEngine] Error in '" << path
+              << "': " << err.what() << '\n';
+    return false;
+  }
+  return true;
+}
+
+bool ScriptingEngine::RunString(std::string_view src, std::string_view chunkName) {
+  auto result = m_impl->lua.safe_script(
+      src, chunkName, sol::script_pass_on_error);
+  if (!result.valid()) {
+    const sol::error err = result;
+    std::cerr << "[ScriptingEngine] Error in '" << chunkName
               << "': " << err.what() << '\n';
     return false;
   }

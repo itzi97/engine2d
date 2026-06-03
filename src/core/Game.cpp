@@ -3,6 +3,9 @@
 #include <SDL3/SDL.h>
 #include <iostream>
 
+// Generated at build time from scripts/snake.lua
+#include "embedded_snake.hpp"
+
 Game::Game() = default;
 Game::~Game() = default;
 
@@ -32,8 +35,8 @@ bool Game::Initialize() {
 
   m_scripting->BindWorld(m_world.get());
 
-  if (!m_scripting->RunScript("scripts/snake.lua")) {
-    std::cerr << "[Game] Failed to load scripts/snake.lua\n";
+  if (!m_scripting->RunString(embedded::snake, "snake.lua")) {
+    std::cerr << "[Game] Failed to run embedded snake script\n";
     return false;
   }
 

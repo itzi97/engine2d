@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
+include(cmake/EmbedScript.cmake)
 
 # -- SDL3 ---------------------------------------------------------------------
 FetchContent_Declare(
@@ -26,10 +27,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glm)
 
 # -- Lua 5.4.8 ----------------------------------------------------------------
-# Lua has no CMakeLists.txt so we build it manually.
-# We fetch 5.4.8 to match the CachyOS/Arch system Lua version, which added
-# a third `unsigned seed` argument to lua_newstate().
-# CMP0169: suppress FetchContent_Populate deprecation warning.
 cmake_policy(SET CMP0169 OLD)
 FetchContent_Declare(
     lua
@@ -50,10 +47,6 @@ add_library(lua_static STATIC ${LUA_SOURCES})
 target_include_directories(lua_static PUBLIC "${lua_SOURCE_DIR}")
 
 # -- Lua shim -----------------------------------------------------------------
-# sol2 does #include <lua.hpp> with angle brackets. The system /usr/include/lua.hpp
-# would win that search and pull in a different Lua version. We copy a shim
-# lua.hpp plus all fetched Lua headers into build/lua-shim/ and inject that
-# directory first on the include path so <lua.hpp> resolves to our 5.4.8 headers.
 set(LUA_SHIM_DIR "${CMAKE_BINARY_DIR}/lua-shim")
 file(MAKE_DIRECTORY "${LUA_SHIM_DIR}")
 
@@ -67,8 +60,6 @@ foreach(_hdr lua.h luaconf.h lualib.h lauxlib.h)
 endforeach()
 
 # -- sol2 (develop) -----------------------------------------------------------
-# sol2 v3.3.0 does not handle the Lua 5.4.8 lua_newstate(f, ud, seed)
-# 3-argument signature. The develop branch contains the fix.
 set(SOL2_ENABLE_INSTALL FALSE CACHE BOOL   "" FORCE)
 set(SOL2_LUA_VERSION   "5.4"  CACHE STRING "" FORCE)
 set(SOL2_BUILD_LUA     FALSE  CACHE BOOL   "" FORCE)
@@ -82,7 +73,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(sol2)
 
-# Shim dir must come first so <lua.hpp> resolves to our wrapper, not /usr/include.
 target_include_directories(sol2 INTERFACE
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
@@ -97,6 +87,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# -- Embed Lua scripts --------------------------------------------------------
+embed_script(snake scripts/snake.lua)
+
 # -- Sources ------------------------------------------------------------------
 set(ENGINE_SOURCES
     src/main.cpp
@@ -107,9 +100,11 @@ set(ENGINE_SOURCES
 )
 
 add_executable(${PROJECT_NAME} ${ENGINE_SOURCES})
+add_dependencies(${PROJECT_NAME} embed_snake)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
+    "${CMAKE_BINARY_DIR}/generated"
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
 )
