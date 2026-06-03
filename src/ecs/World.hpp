@@ -15,17 +15,16 @@
 #include <SDL3/SDL.h>
 
 // ---------------------------------------------------------------------------
-// Type-erased storage interface
+// Type-erased storage interface — no Update/Render, systems own that now
 // ---------------------------------------------------------------------------
 struct IComponentStorage {
   virtual ~IComponentStorage() = default;
-  virtual void Erase(EntityId entity)                       = 0;
-  virtual void Update(float dt)                             = 0;
-  virtual void Render(SDL_Renderer *renderer, World *world) = 0;
+  virtual void Erase(EntityId entity) = 0;
 };
 
 // ---------------------------------------------------------------------------
 // PackedStorage<T>: contiguous vector + O(1) lookup + swap-and-pop removal
+// Public members let systems iterate without friendship boilerplate.
 // ---------------------------------------------------------------------------
 template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
@@ -63,26 +62,6 @@ struct PackedStorage final : IComponentStorage {
     entities.pop_back();
     index.erase(entity);
   }
-
-  void Update(float dt) override {
-    for (auto &c : components) c.Update(dt);
-  }
-
-  void Render(SDL_Renderer *renderer, World *world) override {
-    for (auto &c : components) c.Render(renderer, world);
-  }
-};
-
-// ---------------------------------------------------------------------------
-// Update priority order — lower index runs first.
-// TransformComponent must run before KinematicComponent.
-// Add new types here when they have order dependencies.
-// ---------------------------------------------------------------------------
-static inline const std::vector<std::type_index> kUpdateOrder = {
-  std::type_index(typeid(TransformComponent)),
-  std::type_index(typeid(KinematicComponent)),
-  std::type_index(typeid(SpriteComponent)),
-  std::type_index(typeid(TagComponent)),
 };
 
 // ---------------------------------------------------------------------------
@@ -122,8 +101,13 @@ public:
     it->second->Erase(entity);
   }
 
-  // Factory for KinematicComponent: injects World* atomically.
-  KinematicComponent &AddKinematic(EntityId entity);
+  // Returns the raw storage for type T — used by systems for bulk iteration.
+  template <ComponentType T>
+  [[nodiscard]] PackedStorage<T> *GetStorage() {
+    const auto it = m_storages.find(std::type_index(typeid(T)));
+    if (it == m_storages.end()) return nullptr;
+    return static_cast<PackedStorage<T> *>(it->second.get());
+  }
 
   void Update(float deltaTime);
   void Render(SDL_Renderer *renderer);
