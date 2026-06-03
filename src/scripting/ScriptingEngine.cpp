@@ -171,8 +171,6 @@ struct ScriptingEngine::Impl {
     eng.set_function("mouse_position",
         [input]() -> std::tuple<float,float> { return {input->MouseX(), input->MouseY()}; });
 
-    // engine.load_scene(fn) -- schedules fn to run at the start of the next
-    // frame after FlushDestroyQueue + ClearAll. Safe to call from on_update.
     eng.set_function("load_scene", [this](sol::function fn) {
       pendingScene = [fn]() mutable {
         auto result = fn();
@@ -183,8 +181,7 @@ struct ScriptingEngine::Impl {
       };
     });
 
-    // engine.quit() -- request clean exit from the game loop
-    eng.set_function("quit", [input]() { SDL_Event e; e.type = SDL_EVENT_QUIT; SDL_PushEvent(&e); });
+    eng.set_function("quit", [](){ SDL_Event e; e.type = SDL_EVENT_QUIT; SDL_PushEvent(&e); });
   }
 };
 
@@ -194,6 +191,10 @@ ScriptingEngine::~ScriptingEngine() = default;
 void ScriptingEngine::BindWorld(World *world)        { m_impl->BindWorld(world); }
 void ScriptingEngine::BindInput(InputManager *input) { m_impl->BindEngine(input); }
 void ScriptingEngine::BindFonts(FontManager *)       { /* fonts accessed via FONT_PATH in TextSystem */ }
+
+void ScriptingEngine::ResetOnUpdate() {
+  m_impl->onUpdateFn = sol::function{};
+}
 
 std::function<void()> ScriptingEngine::TakePendingScene() {
   return std::exchange(m_impl->pendingScene, nullptr);
