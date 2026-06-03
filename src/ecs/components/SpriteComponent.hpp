@@ -10,6 +10,11 @@
 //                 srcRect.w  > 0  →  render the given sub-rect (atlas sprite).
 // Color-rect mode: texture == nullptr, color used with SDL_RenderFillRect.
 //                  Existing snake / breakout scripts keep working unchanged.
+//
+// Tint / alpha  : tint is multiplied into the texture during rendering via
+//                 SDL_SetTextureColorMod + SDL_SetTextureAlphaMod.
+//                 {255,255,255,255} == no tint (identity).
+//                 Works in both texture mode and is ignored in color-rect mode.
 struct SpriteComponent : Component {
   // --- color-rect (always valid as fallback) ---
   SDL_Color color{255, 255, 255, 255};
@@ -19,6 +24,11 @@ struct SpriteComponent : Component {
   SDL_Texture *texture{nullptr};    // raw observing ptr; owned by TextureManager
   SDL_FRect    srcRect{0, 0, 0, 0}; // source rect on atlas; w==0 → full texture
   SDL_FlipMode flip{SDL_FLIP_NONE};
+
+  // --- tint (optional, texture mode only) ---
+  // Multiplied into the texture colour channel-by-channel before blending.
+  // Default {255,255,255,255} is identity (no tint, full opacity).
+  SDL_Color tint{255, 255, 255, 255};
 
   explicit SpriteComponent(SDL_Color col = {255, 255, 255, 255}, int l = 0)
       : color(col), layer(l) {}

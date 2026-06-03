@@ -39,7 +39,6 @@ static SDL_Keycode KeycodeFromString(const std::string &key) {
 }
 
 // ---------------------------------------------------------------------------
-// Raw-API helper: register a lua_CFunction closure into a named table field.
 static void SetRawFunction(lua_State *L, const char *table,
                            const char *field,
                            lua_CFunction fn,
@@ -165,9 +164,19 @@ struct ScriptingEngine::Impl {
           }
         });
 
+    // world.set_sprite_tint(e, r, g, b [, a])
+    // r,g,b,a in 0-255. Alpha defaults to 255 (fully opaque).
+    // Pass 255,255,255,255 to clear the tint back to identity.
+    w.set_function("set_sprite_tint",
+        [world](EntityId e, int r, int g, int b, sol::optional<int> a) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e))
+            s->tint = SDL_Color{
+                static_cast<Uint8>(r), static_cast<Uint8>(g),
+                static_cast<Uint8>(b), static_cast<Uint8>(a.value_or(255))};
+        });
+    // -------------------------------------------------------------------------
+
     // -- Animation API --------------------------------------------------------
-    // world.add_animation(e, frames_table, frame_duration [, loop])
-    // frames_table: array of {x, y, w, h} sub-tables
     w.set_function("add_animation",
         [world](EntityId e, sol::table frames, float dur, sol::optional<bool> loop) {
           auto &anim = world->AddComponent<AnimationComponent>(e);
@@ -184,7 +193,6 @@ struct ScriptingEngine::Impl {
               f.get_or("h", 0.f),
             });
           }
-          // Initialise SpriteComponent srcRect to frame 0 immediately
           if (!anim.frames.empty())
             if (auto *s = world->GetComponent<SpriteComponent>(e))
               s->srcRect = anim.frames[0];
