@@ -154,14 +154,26 @@ bool ScriptingEngine::RunScript(const std::filesystem::path &path) {
 }
 
 bool ScriptingEngine::RunString(std::string_view src, std::string_view chunkName) {
-  // sol2 safe_script expects const std::string& for the chunk name,
-  // and sol::string_view (which is std::string_view) for the source --
-  // but the error-handler overload requires an explicit std::string chunk name.
-  auto result = m_impl->lua.safe_script(
-      std::string(src), std::string(chunkName), sol::script_pass_on_error);
+  // sol2's safe_script has no overload combining a chunk name AND an error
+  // handler. Use luaL_loadbuffer directly to set the chunk name, then execute
+  // the resulting function via sol::protected_function for safe error handling.
+  lua_State *L = m_impl->lua.lua_state();
+
+  const std::string name = "@" + std::string(chunkName); // '@' prefix = source name
+  const int loadErr = luaL_loadbuffer(L, src.data(), src.size(), name.c_str());
+  if (loadErr != LUA_OK) {
+    std::cerr << "[ScriptingEngine] Compile error in '" << chunkName
+              << "': " << lua_tostring(L, -1) << '\n';
+    lua_pop(L, 1);
+    return false;
+  }
+
+  // The compiled chunk is now on top of the stack as a function.
+  sol::protected_function chunk(m_impl->lua.stack_top(), m_impl->lua);
+  auto result = chunk();
   if (!result.valid()) {
     const sol::error err = result;
-    std::cerr << "[ScriptingEngine] Error in '" << chunkName
+    std::cerr << "[ScriptingEngine] Runtime error in '" << chunkName
               << "': " << err.what() << '\n';
     return false;
   }
