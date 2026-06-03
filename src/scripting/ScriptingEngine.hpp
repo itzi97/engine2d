@@ -22,4 +22,8 @@ public:
 
   /// Calls the Lua engine.on_update callback if registered.
   void CallOnUpdate(float dt);
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> m_impl;
 };

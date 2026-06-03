@@ -1,8 +1,10 @@
-// src/etc/components/TransformerComponent.hpp
+// src/ecs/components/TransformComponent.hpp
 #pragma once
 
 #include "ecs/Component.hpp"
 #include <glm/vec2.hpp>
+
+class World;
 
 struct TransformComponent : Component {
   glm::vec2 position{0.0f, 0.0f};
@@ -19,9 +21,10 @@ struct TransformComponent : Component {
       : position(pos), scale(scl), rotation(rot) {}
 
   void Update([[maybe_unused]] float dt) override {
-    // TODO: Uncomment when snake is handled better
     // velocity += acceleration * dt;
     // position += velocity * dt;
   }
-  void Render(SDL_Renderer *) override {} // transform doesn't render itself
+
+  // Transform doesn't render itself; match the updated base signature.
+  void Render(SDL_Renderer *, World *) override {}
 };
