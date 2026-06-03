@@ -90,10 +90,6 @@ void Game::Run() {
   float accumulator = 0.f;
 
   while (running) {
-    // Snapshot previous input state BEFORE polling new events so that
-    // IsKeyJustPressed / IsKeyJustReleased compare this frame against last.
-    m_input->EndFrame();
-
     const auto  now = steady_clock::now();
     const float raw = static_cast<float>(
         duration<double>(now - previous).count());
@@ -105,6 +101,11 @@ void Game::Run() {
 
     accumulator += dt;
     while (accumulator >= kFixedDt) {
+      // Snapshot prev = curr immediately before Update so that
+      // IsKeyJustPressed compares the state at this fixed tick
+      // against the state at the previous fixed tick — not against
+      // whatever the outer loop happened to capture earlier.
+      m_input->EndFrame();
       Update(kFixedDt);
       accumulator -= kFixedDt;
     }
