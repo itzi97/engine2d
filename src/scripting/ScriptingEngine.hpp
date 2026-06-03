@@ -7,6 +7,7 @@
 class World;
 class InputManager;
 class FontManager;
+class TextureManager;
 
 class ScriptingEngine {
 public:
@@ -19,6 +20,7 @@ public:
   void BindWorld(World *world);
   void BindInput(InputManager *input);
   void BindFonts(FontManager *fonts);
+  void BindTextures(TextureManager *textures);
 
   void CallOnUpdate(float dt);
   bool RunScript(const std::filesystem::path &path);

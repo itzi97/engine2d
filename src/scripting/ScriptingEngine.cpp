@@ -14,6 +14,7 @@
 #include "ecs/components/TransformComponent.hpp"
 #include "input/InputManager.hpp"
 #include "rendering/FontManager.hpp"
+#include "rendering/TextureManager.hpp"
 
 #include <SDL3/SDL.h>
 #include <iostream>
@@ -40,6 +41,7 @@ struct ScriptingEngine::Impl {
   sol::state    lua;
   sol::function onUpdateFn;
   std::function<void()> pendingScene;
+  World        *m_world{nullptr};
 
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
@@ -50,6 +52,7 @@ struct ScriptingEngine::Impl {
   }
 
   void BindWorld(World *world) {
+    m_world = world;
     auto w = lua.create_named_table("world");
 
     w.set_function("create_entity",  [world]() -> EntityId { return world->CreateEntity(); });
@@ -69,6 +72,15 @@ struct ScriptingEngine::Impl {
           if (auto *t = world->GetComponent<TransformComponent>(e))
             return {t->position.x, t->position.y};
           return {0.f, 0.f};
+        });
+    w.set_function("set_rotation",
+        [world](EntityId e, float deg) {
+          if (auto *t = world->GetComponent<TransformComponent>(e)) t->rotation = deg;
+        });
+    w.set_function("get_rotation",
+        [world](EntityId e) -> float {
+          if (auto *t = world->GetComponent<TransformComponent>(e)) return t->rotation;
+          return 0.f;
         });
 
     w.set_function("add_kinematic", [world](EntityId e) { world->AddComponent<KinematicComponent>(e); });
@@ -99,6 +111,39 @@ struct ScriptingEngine::Impl {
         [world](EntityId e, int layer) {
           if (auto *s = world->GetComponent<SpriteComponent>(e)) s->layer = layer;
         });
+
+    // -- Texture API ----------------------------------------------------------
+    // world.set_sprite_texture(e, tex, sx, sy, sw, sh)
+    //   tex        : lightuserdata from engine.load_texture()
+    //   sx,sy,sw,sh: source rect on the atlas; omit (or pass 0,0,0,0) for full texture
+    w.set_function("set_sprite_texture",
+        [world](EntityId e, SDL_Texture *tex,
+                sol::optional<float> sx, sol::optional<float> sy,
+                sol::optional<float> sw, sol::optional<float> sh) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e)) {
+            s->texture = tex;
+            s->srcRect = { sx.value_or(0.f), sy.value_or(0.f),
+                           sw.value_or(0.f), sh.value_or(0.f) };
+          }
+        });
+
+    // world.set_sprite_src(e, sx, sy, sw, sh)  — change atlas rect without changing texture
+    w.set_function("set_sprite_src",
+        [world](EntityId e, float sx, float sy, float sw, float sh) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e))
+            s->srcRect = {sx, sy, sw, sh};
+        });
+
+    // world.set_sprite_flip(e, flipX, flipY)
+    w.set_function("set_sprite_flip",
+        [world](EntityId e, bool flipX, bool flipY) {
+          if (auto *s = world->GetComponent<SpriteComponent>(e)) {
+            const int f = (flipX ? SDL_FLIP_HORIZONTAL : 0)
+                        | (flipY ? SDL_FLIP_VERTICAL   : 0);
+            s->flip = static_cast<SDL_FlipMode>(f);
+          }
+        });
+    // -------------------------------------------------------------------------
 
     w.set_function("add_tag",
         [world](EntityId e, const std::string &tag) {
@@ -183,6 +228,16 @@ struct ScriptingEngine::Impl {
 
     eng.set_function("quit", [](){ SDL_Event e; e.type = SDL_EVENT_QUIT; SDL_PushEvent(&e); });
   }
+
+  void BindTextures(TextureManager *textures) {
+    // engine.load_texture(path) → lightuserdata (SDL_Texture*)
+    // Lifetime: texture is owned by TextureManager, valid for the entire session.
+    auto eng = lua["engine"];
+    eng.set_function("load_texture",
+        [textures](const std::string &path) -> SDL_Texture * {
+          return textures->Load(path);
+        });
+  }
 };
 
 ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
@@ -191,6 +246,7 @@ ScriptingEngine::~ScriptingEngine() = default;
 void ScriptingEngine::BindWorld(World *world)        { m_impl->BindWorld(world); }
 void ScriptingEngine::BindInput(InputManager *input) { m_impl->BindEngine(input); }
 void ScriptingEngine::BindFonts(FontManager *)       { /* fonts accessed via FONT_PATH in TextSystem */ }
+void ScriptingEngine::BindTextures(TextureManager *textures) { m_impl->BindTextures(textures); }
 
 void ScriptingEngine::ResetOnUpdate() {
   m_impl->onUpdateFn = sol::function{};

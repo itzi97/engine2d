@@ -3,6 +3,7 @@
 #include "ecs/World.hpp"
 #include "input/InputManager.hpp"
 #include "rendering/FontManager.hpp"
+#include "rendering/TextureManager.hpp"
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
@@ -39,5 +40,6 @@ private:
   std::unique_ptr<World>           m_world;
   std::unique_ptr<InputManager>    m_input;
   std::unique_ptr<FontManager>     m_fonts;
+  std::unique_ptr<TextureManager>  m_textures;
   std::unique_ptr<ScriptingEngine> m_scripting;
 };

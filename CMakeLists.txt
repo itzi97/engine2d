@@ -38,6 +38,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SDL3_ttf)
 
+# -- SDL3_image ---------------------------------------------------------------
+set(SDLIMAGE_VENDORED TRUE CACHE BOOL "" FORCE)  # use bundled image decoders
+FetchContent_Declare(
+    SDL3_image
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
+    GIT_TAG        release-3.2.4
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(SDL3_image)
+
 # -- GLM ----------------------------------------------------------------------
 FetchContent_Declare(
     glm
@@ -106,11 +116,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 # -- DejaVu Sans font ---------------------------------------------------------
-# FetchContent downloads the official release tarball and verifies its hash.
-# A failed download is a hard configure error (unlike file(DOWNLOAD) which
-# silently writes a 0-byte file on failure).
-# The tarball is unpacked into build/_deps/dejavu_fonts-src; we copy the one
-# file we need into assets/fonts/ so FONT_PATH stays a stable source-tree path.
 set(FONT_DIR  "${CMAKE_SOURCE_DIR}/assets/fonts")
 set(FONT_FILE "${FONT_DIR}/DejaVuSans.ttf")
 
@@ -154,6 +159,7 @@ set(ENGINE_SOURCES
     src/ecs/systems/TextSystem.cpp
     src/input/InputManager.cpp
     src/rendering/FontManager.cpp
+    src/rendering/TextureManager.cpp
     src/scripting/ScriptingEngine.cpp
 )
 
@@ -174,6 +180,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
+    SDL3_image::SDL3_image
     glm::glm
     nlohmann_json::nlohmann_json
     sol2
