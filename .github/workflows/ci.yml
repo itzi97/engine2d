@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        game: [snake, breakout]
+        game: [snake, breakout, smoke]
 
     steps:
       - name: Checkout
@@ -39,7 +39,8 @@ jobs:
             wayland-protocols \
             libasound2-dev \
             libpulse-dev \
-            libudev-dev
+            libudev-dev \
+            xvfb
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -62,3 +63,14 @@ jobs:
 
       - name: Build
         run: cmake --build build --parallel
+
+      - name: Run smoke test
+        if: matrix.game == 'smoke'
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 &
+          XVFB_PID=$!
+          sleep 1
+          DISPLAY=:99 timeout 10 ./build/2d-engine
+          EXIT_CODE=$?
+          kill $XVFB_PID 2>/dev/null || true
+          exit $EXIT_CODE
