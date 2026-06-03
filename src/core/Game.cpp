@@ -97,18 +97,20 @@ void Game::Run() {
 
     const float dt = (raw < 0.05f) ? raw : 0.05f;
 
+    // 1. Poll — fills m_curr with fresh key states for this real frame.
     ProcessEvents(running);
 
+    // 2. Fixed-step ticks — Lua sees curr vs prev from last real frame.
     accumulator += dt;
     while (accumulator >= kFixedDt) {
-      // Snapshot prev = curr immediately before Update so that
-      // IsKeyJustPressed compares the state at this fixed tick
-      // against the state at the previous fixed tick — not against
-      // whatever the outer loop happened to capture earlier.
-      m_input->EndFrame();
       Update(kFixedDt);
       accumulator -= kFixedDt;
     }
+
+    // 3. Snapshot — prev = curr, ready for the next real frame.
+    //    Must come AFTER all Update ticks so IsKeyJustPressed fires for
+    //    exactly one real frame per physical key-down event.
+    m_input->EndFrame();
 
     Render();
   }
