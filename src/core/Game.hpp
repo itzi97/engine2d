@@ -4,6 +4,7 @@
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
+#include <deque>
 #include <memory>
 #include <string_view>
 
@@ -43,9 +44,12 @@ private:
   // TODO: Move to Lua
   EntityId m_snakeHead{};
   EntityId m_food{};
+  std::deque<EntityId> m_snakeBody;
   float m_snakeAccumulator = 0.0f;
   static constexpr float kSnakeStepTime = 1.0f / 10.0f;
 
+  void ResetGame();
   void UpdateSnakeStep();
+  void GrowSnake();
   void SpawnFood();
 };

@@ -150,23 +150,85 @@ void Game::Render() {
 
 void Game::UpdateSnakeStep() {
   auto *headT = m_world->GetComponent<TransformComponent>(m_snakeHead);
-  if (headT) {
-    // Unit grid velocity
-    headT->position.x += headT->velocity.x * cellSize;
-    headT->position.y += headT->velocity.y * cellSize;
+  if (!headT)
+    return;
+
+  // 1. Save head's current position BEFORE moving
+  const glm::vec2 prevHeadPos = headT->position;
+
+  // 2. Move head
+  headT->position.x += headT->velocity.x * cellSize;
+  headT->position.y += headT->velocity.y * cellSize;
+
+  // 3. Cascade body: each segment takes the position of the segment in front of
+  // it.
+  if (!m_snakeBody.empty()) {
+    // Shift positions: segment[i] gets segment[i-1]'s old position
+    glm::vec2 prev = prevHeadPos;
+    for (EntityId seg : m_snakeBody) {
+      auto *segT = m_world->GetComponent<TransformComponent>(seg);
+      if (!segT)
+        continue;
+      glm::vec2 tmp = segT->position;
+      segT->position = prev;
+      prev = tmp;
+    }
   }
 
-  // Collision check with food
+  // 4. Collision check with food
   if (headT && m_food != 0) {
     if (auto *foodT = m_world->GetComponent<TransformComponent>(m_food)) {
-      if (headT->position.x == foodT->position.x &&
-          headT->position.y == foodT->position.y) {
-        // TODO: grow snake later
-        std::cout << "[Game] Collission detected" << std::endl;
+      if (headT->position == foodT->position) {
+        GrowSnake();
         SpawnFood();
       }
     }
   }
+
+  // 5. Bounds collision -> reset
+  const int cellsX = static_cast<int>(kWidth / cellSize);
+  const int cellsY = static_cast<int>(kHeight / cellSize);
+  const bool oob = headT->position.x < 0 || headT->position.y < 0 ||
+                   headT->position.x >= kWidth || headT->position.y >= kHeight;
+  if (oob) {
+    ResetGame();
+    return;
+  }
+
+  // 6. Self collision
+  for (EntityId seg : m_snakeBody) {
+    auto *segT = m_world->GetComponent<TransformComponent>(seg);
+    if (segT && headT->position == segT->position) {
+      ResetGame();
+      return;
+    }
+  }
+}
+
+void Game::GrowSnake() {
+  // Spawn an ew segment at the current tail position
+  // (it will be covered by the tail until the next step - invisible flash)
+  EntityId seg = m_world->CreateEntity();
+
+  // Find last known position: tail if body exists, else head
+  glm::vec2 spawnPos{};
+  if (!m_snakeBody.empty()) {
+    auto *t = m_world->GetComponent<TransformComponent>(m_snakeBody.back());
+    spawnPos = t ? t->position : glm::vec2{};
+  } else {
+    auto *t = m_world->GetComponent<TransformComponent>(m_snakeHead);
+    spawnPos = t ? t->position : glm::vec2{};
+  }
+
+  auto &t = m_world->AddComponent<TransformComponent>(seg);
+  t.position = spawnPos;
+  t.size = {cellSize, cellSize};
+  t.velocity = {0.0f, 0.0f};
+
+  m_world->AddComponent<SpriteComponent>(seg, &t, SDL_Color{0, 200, 0, 255});
+  m_world->AddComponent<TagComponent>(seg).tag = "snake_body";
+
+  m_snakeBody.push_back(seg);
 }
 
 void Game::SpawnFood() {
@@ -200,4 +262,20 @@ void Game::SpawnFood() {
 
   auto &tag = m_world->AddComponent<TagComponent>(m_food);
   tag.tag = "food";
+}
+
+void Game::ResetGame() {
+  // Destroy all body segments
+  for (EntityId seg : m_snakeBody)
+    m_world->DestroyEntity(seg);
+  m_snakeBody.clear();
+
+  // Start position and direction for head
+  if (auto *t = m_world->GetComponent<TransformComponent>(m_snakeHead)) {
+    t->position = {10.0f * cellSize, 10.0f * cellSize};
+    t->velocity = {1.0f, 0.0f};
+  }
+
+  SpawnFood();
+  std::cout << "[Game] Reset" << std::endl;
 }
