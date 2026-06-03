@@ -39,6 +39,7 @@ static SDL_Keycode KeycodeFromString(const std::string &key) {
 struct ScriptingEngine::Impl {
   sol::state    lua;
   sol::function onUpdateFn;
+  std::function<void()> pendingScene;
 
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
@@ -133,7 +134,6 @@ struct ScriptingEngine::Impl {
           }
         });
 
-    // Collision queries delegate to World -- CollisionSystem is now stateless.
     w.set_function("get_collisions_for",
         [this, world](EntityId entity) -> sol::table {
           auto tbl = lua.create_table(); int i = 1;
@@ -170,6 +170,21 @@ struct ScriptingEngine::Impl {
     eng.set_function("is_mouse_just_released", [input](int b) { return input->IsMouseJustReleased(b); });
     eng.set_function("mouse_position",
         [input]() -> std::tuple<float,float> { return {input->MouseX(), input->MouseY()}; });
+
+    // engine.load_scene(fn) -- schedules fn to run at the start of the next
+    // frame after FlushDestroyQueue + ClearAll. Safe to call from on_update.
+    eng.set_function("load_scene", [this](sol::function fn) {
+      pendingScene = [fn]() mutable {
+        auto result = fn();
+        if (!result.valid()) {
+          sol::error err = result;
+          std::cerr << "[ScriptingEngine] load_scene error: " << err.what() << '\n';
+        }
+      };
+    });
+
+    // engine.quit() -- request clean exit from the game loop
+    eng.set_function("quit", [input]() { SDL_Event e; e.type = SDL_EVENT_QUIT; SDL_PushEvent(&e); });
   }
 };
 
@@ -179,6 +194,10 @@ ScriptingEngine::~ScriptingEngine() = default;
 void ScriptingEngine::BindWorld(World *world)        { m_impl->BindWorld(world); }
 void ScriptingEngine::BindInput(InputManager *input) { m_impl->BindEngine(input); }
 void ScriptingEngine::BindFonts(FontManager *)       { /* fonts accessed via FONT_PATH in TextSystem */ }
+
+std::function<void()> ScriptingEngine::TakePendingScene() {
+  return std::exchange(m_impl->pendingScene, nullptr);
+}
 
 void ScriptingEngine::CallOnUpdate(float dt) {
   if (m_impl->onUpdateFn.valid()) {

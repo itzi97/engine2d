@@ -60,8 +60,15 @@ void Game::Update(float dt) {
   m_world->Update(dt);
   m_scripting->CallOnUpdate(dt);
   m_world->RunCollision();
-  // Flush after all systems have finished iterating — safe erasure point.
   m_world->FlushDestroyQueue();
+
+  // Scene transition: runs after all systems and destroy queue are flushed,
+  // so ClearAll() is safe and no iterator is live.
+  if (auto scene = m_scripting->TakePendingScene()) {
+    m_world->ClearAll();
+    m_scripting->ResetOnUpdate();
+    scene();
+  }
 }
 
 void Game::Render() {

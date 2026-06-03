@@ -20,7 +20,7 @@
 #include <SDL3/SDL.h>
 
 // ---------------------------------------------------------------------------
-// Collision result (defined here so World can own them)
+// Collision result
 // ---------------------------------------------------------------------------
 struct Collision {
   EntityId a;
@@ -33,10 +33,11 @@ struct Collision {
 struct IComponentStorage {
   virtual ~IComponentStorage() = default;
   virtual void Erase(EntityId entity) = 0;
+  virtual void Clear() = 0;
 };
 
 // ---------------------------------------------------------------------------
-// PackedStorage<T>  --  swap-and-pop flat array, O(1) erase
+// PackedStorage<T>
 // ---------------------------------------------------------------------------
 template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
@@ -83,13 +84,19 @@ struct PackedStorage final : IComponentStorage {
     index.erase(entity);
   }
 
+  void Clear() override {
+    components.clear();
+    entities.clear();
+    index.clear();
+  }
+
   std::vector<T>                       components;
   std::vector<EntityId>                entities;
   std::unordered_map<EntityId, size_t> index;
 };
 
 // ---------------------------------------------------------------------------
-// ComponentView<T>  --  read-only span pair returned by World::View<T>()
+// ComponentView<T>
 // ---------------------------------------------------------------------------
 template <ComponentType T>
 struct ComponentView {
@@ -132,6 +139,18 @@ public:
       m_freeList.push(e);
     }
     m_pendingDestroy.clear();
+  }
+
+  // Immediately destroy every entity and clear all storages.
+  // Only call this from a safe scene-transition point (never mid-frame).
+  void ClearAll() {
+    for (auto &[type, storage] : m_storages)
+      storage->Clear();
+    // Drain the free list and reset the entity counter so IDs restart cleanly.
+    while (!m_freeList.empty()) m_freeList.pop();
+    m_pendingDestroy.clear();
+    m_collisions.clear();
+    Entity::Reset();
   }
 
   // ---- Component access ---------------------------------------------------
@@ -189,7 +208,7 @@ public:
              std::span<const EntityId>{s->entities} };
   }
 
-  // ---- Collision results (written by CollisionSystem::Update) -------------
+  // ---- Collision results --------------------------------------------------
 
   void ClearCollisions() { m_collisions.clear(); }
   void AddCollision(Collision c) { m_collisions.push_back(c); }
@@ -225,8 +244,8 @@ public:
 
 private:
   std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_storages;
-  std::queue<EntityId>  m_freeList;
-  std::vector<EntityId> m_pendingDestroy;
+  std::queue<EntityId>   m_freeList;
+  std::vector<EntityId>  m_pendingDestroy;
   std::vector<Collision> m_collisions;
 
   template <ComponentType T>
