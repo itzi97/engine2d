@@ -106,6 +106,10 @@ public:
     it->second->Erase(entity);
   }
 
+  // Factory for KinematicComponent: injects World* atomically.
+  // Always use this instead of AddComponent<KinematicComponent>.
+  KinematicComponent &AddKinematic(EntityId entity);
+
   void Update(float deltaTime);
   void Render(SDL_Renderer *renderer);
 

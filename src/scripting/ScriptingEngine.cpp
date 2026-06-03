@@ -16,7 +16,6 @@
 #include <SDL3/SDL.h>
 #include <iostream>
 
-// Map string key names to SDL_Keycode
 static SDL_Keycode KeycodeFromString(const std::string &key) {
   if (key == "UP")     return SDLK_UP;
   if (key == "DOWN")   return SDLK_DOWN;
@@ -36,7 +35,7 @@ static SDL_Keycode KeycodeFromString(const std::string &key) {
 }
 
 struct ScriptingEngine::Impl {
-  sol::state   lua;
+  sol::state    lua;
   sol::function onUpdateFn;
 
   Impl() {
@@ -77,11 +76,11 @@ struct ScriptingEngine::Impl {
                        return {t->position.x, t->position.y};
                      return {0.f, 0.f};
                    });
-    w.set_function("add_kinematic",
-                   [world](EntityId e) {
-                     auto &k = world->AddComponent<KinematicComponent>(e, e);
-                     k.world = world;
-                   });
+
+    // Factory method -- World* is injected atomically, no post-construction step
+    w.set_function("add_kinematic", [world](EntityId e) {
+      world->AddKinematic(e);
+    });
     w.set_function("set_velocity",
                    [world](EntityId e, float vx, float vy) {
                      if (auto *k = world->GetComponent<KinematicComponent>(e))
@@ -122,26 +121,18 @@ struct ScriptingEngine::Impl {
     eng.set_function("on_update", [this](sol::function fn) {
       onUpdateFn = fn;
     });
-
-    // Polling (held)
     eng.set_function("is_key_pressed",
                      [input](const std::string &key) -> bool {
                        return input->IsKeyPressed(KeycodeFromString(key));
                      });
-
-    // Single-frame down
     eng.set_function("is_key_just_pressed",
                      [input](const std::string &key) -> bool {
                        return input->IsKeyJustPressed(KeycodeFromString(key));
                      });
-
-    // Single-frame up
     eng.set_function("is_key_just_released",
                      [input](const std::string &key) -> bool {
                        return input->IsKeyJustReleased(KeycodeFromString(key));
                      });
-
-    // Mouse
     eng.set_function("is_mouse_pressed",
                      [input](int btn) -> bool {
                        return input->IsMousePressed(btn);

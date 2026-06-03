@@ -1,4 +1,10 @@
 #include "ecs/World.hpp"
+#include "ecs/components/KinematicComponent.hpp"
+
+KinematicComponent &World::AddKinematic(EntityId entity) {
+  return GetOrCreateStorage<KinematicComponent>()
+      .Add(entity, KinematicComponent{entity, this});
+}
 
 void World::Update(float deltaTime) {
   for (auto &[type, storage] : m_storages)
