@@ -4,15 +4,9 @@
 #include "ecs/components/TransformComponent.hpp"
 
 void RenderSystem::Render(World &world, SDL_Renderer *renderer) {
-  auto *sprStorage = world.GetStorage<SpriteComponent>();
-  if (!sprStorage) return;
-
-  for (size_t i = 0; i < sprStorage->entities.size(); ++i) {
-    const EntityId      entity = sprStorage->entities[i];
-    const SpriteComponent &s   = sprStorage->components[i];
-
+  world.ForEach<SpriteComponent>([&](EntityId entity, const SpriteComponent &s) {
     const auto *t = world.GetComponent<TransformComponent>(entity);
-    if (!t) continue;
+    if (!t) return;
 
     const SDL_FRect rect{
         t->position.x,
@@ -23,5 +17,5 @@ void RenderSystem::Render(World &world, SDL_Renderer *renderer) {
 
     SDL_SetRenderDrawColor(renderer, s.color.r, s.color.g, s.color.b, s.color.a);
     SDL_RenderFillRect(renderer, &rect);
-  }
+  });
 }

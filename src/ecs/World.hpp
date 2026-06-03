@@ -23,13 +23,29 @@ struct IComponentStorage {
 };
 
 // ---------------------------------------------------------------------------
-// PackedStorage<T>: contiguous vector + O(1) lookup + swap-and-pop removal
+// PackedStorage<T>: contiguous vector + O(1) lookup + swap-and-pop removal.
+//
+// Prefer ForEach for normal iteration — it hides the parallel-array layout
+// and prevents callers from indexing components/entities directly.
+// GetStorage<T>() is available for systems that need two storages at once
+// (e.g. CollisionSystem), but should not be the default.
 // ---------------------------------------------------------------------------
 template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
-  std::vector<T>                       components;
-  std::vector<EntityId>                entities;
-  std::unordered_map<EntityId, size_t> index;
+  // ForEach: iterate all (entity, component) pairs.
+  // fn signature: void(EntityId, T&)
+  template <typename Fn>
+  void ForEach(Fn &&fn) {
+    for (size_t i = 0; i < entities.size(); ++i)
+      fn(entities[i], components[i]);
+  }
+
+  // Const overload for read-only access.
+  template <typename Fn>
+  void ForEach(Fn &&fn) const {
+    for (size_t i = 0; i < entities.size(); ++i)
+      fn(entities[i], components[i]);
+  }
 
   T &Add(EntityId entity, T &&component) {
     index[entity] = components.size();
@@ -61,6 +77,11 @@ struct PackedStorage final : IComponentStorage {
     entities.pop_back();
     index.erase(entity);
   }
+
+  // Raw arrays — only use these when ForEach is insufficient (e.g. two-storage joins).
+  std::vector<T>                       components;
+  std::vector<EntityId>                entities;
+  std::unordered_map<EntityId, size_t> index;
 };
 
 // ---------------------------------------------------------------------------
@@ -100,7 +121,16 @@ public:
     it->second->Erase(entity);
   }
 
-  // Returns the raw storage for type T -- used by systems for bulk iteration.
+  // ForEach<T>: iterate all (EntityId, T&) pairs without exposing storage layout.
+  // Prefer this over GetStorage in most systems.
+  template <ComponentType T, typename Fn>
+  void ForEach(Fn &&fn) {
+    const auto it = m_storages.find(std::type_index(typeid(T)));
+    if (it == m_storages.end()) return;
+    static_cast<PackedStorage<T> *>(it->second.get())->ForEach(std::forward<Fn>(fn));
+  }
+
+  // GetStorage: returns the raw storage — use only when ForEach is insufficient.
   template <ComponentType T>
   [[nodiscard]] PackedStorage<T> *GetStorage() {
     const auto it = m_storages.find(std::type_index(typeid(T)));
