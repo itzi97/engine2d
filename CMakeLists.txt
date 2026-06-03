@@ -12,7 +12,7 @@ include(cmake/EmbedScript.cmake)
 # Game selection
 # ---------------------------------------------------------------------------
 set(GAME "snake" CACHE STRING "Game script to embed (filename without .lua)")
-set_property(CACHE GAME PROPERTY STRINGS snake breakout sprite_test)
+set_property(CACHE GAME PROPERTY STRINGS snake breakout sprite_test audio_test)
 
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/scripts/${GAME}.lua")
   message(FATAL_ERROR "Game script not found: scripts/${GAME}.lua")
@@ -51,6 +51,23 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(SDL3_image)
+
+# -- SDL3_mixer ---------------------------------------------------------------
+set(SDLMIXER_VENDORED   TRUE  CACHE BOOL "" FORCE)
+set(SDLMIXER_FLAC       OFF   CACHE BOOL "" FORCE)
+set(SDLMIXER_MOD        OFF   CACHE BOOL "" FORCE)
+set(SDLMIXER_MP3        OFF   CACHE BOOL "" FORCE)
+set(SDLMIXER_MIDI       OFF   CACHE BOOL "" FORCE)
+set(SDLMIXER_OPUS       OFF   CACHE BOOL "" FORCE)
+set(SDLMIXER_WAVPACK    OFF   CACHE BOOL "" FORCE)
+set(SDLMIXER_OGG        ON    CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    SDL3_mixer
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
+    GIT_TAG        release-3.0.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(SDL3_mixer)
 
 # -- GLM ----------------------------------------------------------------------
 FetchContent_Declare(
@@ -154,6 +171,7 @@ execute_process(
 set(ENGINE_SOURCES
     src/main.cpp
     src/core/Game.cpp
+    src/audio/AudioManager.cpp
     src/ecs/World.cpp
     src/ecs/components/KinematicComponent.cpp
     src/ecs/components/SpriteComponent.cpp
@@ -186,6 +204,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
     SDL3_image::SDL3_image
+    SDL3_mixer::SDL3_mixer
     glm::glm
     nlohmann_json::nlohmann_json
     sol2

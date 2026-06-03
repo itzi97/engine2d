@@ -1,22 +1,14 @@
+# Build
 build/
 .cache/
-compile_commands.json
-*.o
-*.a
-*.so
-*.dylib
-*.exe
 
-# CMake generated — never commit these
-cmake_install.cmake
-CMakeCache.txt
-CMakeFiles/
-CPackConfig.cmake
-CPackSourceConfig.cmake
-_deps/
+# Generated
+generated/
 
-# Downloaded at configure time — not tracked in git
-assets/fonts/
-
-# Ignore audio assets
+# Audio assets (CC0 Kenney packs — not stored in Git, see README)
 assets/audio/
+
+# IDE
+.vscode/
+.idea/
+*.swp

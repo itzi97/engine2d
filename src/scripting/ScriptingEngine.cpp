@@ -6,6 +6,7 @@
 #include "scripting/ScriptingEngine.hpp"
 #include "scripting/RawBinding.hpp"
 
+#include "audio/AudioManager.hpp"
 #include "ecs/World.hpp"
 #include "ecs/Entity.hpp"
 #include "ecs/components/AnimationComponent.hpp"
@@ -114,9 +115,6 @@ struct ScriptingEngine::Impl {
           if (auto *s = world->GetComponent<SpriteComponent>(e)) s->layer = layer;
         });
 
-    // -- Texture API ----------------------------------------------------------
-    // set_sprite_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
-    // See scripting/RawBinding.hpp for the full explanation.
     {
       lua_State *L = lua.lua_state();
       RegisterRaw(L, "world", "set_sprite_texture",
@@ -159,9 +157,7 @@ struct ScriptingEngine::Impl {
                 static_cast<Uint8>(r), static_cast<Uint8>(g),
                 static_cast<Uint8>(b), static_cast<Uint8>(a.value_or(255))};
         });
-    // -------------------------------------------------------------------------
 
-    // -- Animation API --------------------------------------------------------
     w.set_function("add_animation",
         [world](EntityId e, sol::table frames, float dur, sol::optional<bool> loop) {
           auto &anim = world->AddComponent<AnimationComponent>(e);
@@ -204,7 +200,6 @@ struct ScriptingEngine::Impl {
               }
           }
         });
-    // -------------------------------------------------------------------------
 
     w.set_function("add_tag",
         [world](EntityId e, const std::string &tag) {
@@ -291,8 +286,6 @@ struct ScriptingEngine::Impl {
   }
 
   void BindTextures(TextureManager *textures) {
-    // load_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
-    // See scripting/RawBinding.hpp for the full explanation.
     lua_State *L = lua.lua_state();
     RegisterRaw(L, "engine", "load_texture",
       [](lua_State *L_) -> int {
@@ -307,6 +300,33 @@ struct ScriptingEngine::Impl {
       },
       static_cast<void *>(textures));
   }
+
+  void BindAudio(AudioManager *audio) {
+    // engine table already exists (created in BindEngine); just extend it.
+    auto eng = lua.create_named_table("engine");
+
+    eng.set_function("load_sfx",
+        [audio](const std::string &path) -> int {
+          return audio->LoadSfx(path);
+        });
+    eng.set_function("play_sfx",
+        [audio](int handle, sol::optional<float> vol) {
+          audio->PlaySfx(handle, vol.value_or(1.f));
+        });
+    eng.set_function("load_music",
+        [audio](const std::string &path) -> int {
+          return audio->LoadMusic(path);
+        });
+    eng.set_function("play_music",
+        [audio](int handle, sol::optional<bool> loop) {
+          audio->PlayMusic(handle, loop.value_or(true));
+        });
+    eng.set_function("pause_music",  [audio]() { audio->PauseMusic(); });
+    eng.set_function("resume_music", [audio]() { audio->ResumeMusic(); });
+    eng.set_function("stop_music",   [audio]() { audio->StopMusic(); });
+    eng.set_function("set_music_volume",
+        [audio](float v) { audio->SetMusicVolume(v); });
+  }
 };
 
 ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
@@ -316,6 +336,7 @@ void ScriptingEngine::BindWorld(World *world)        { m_impl->BindWorld(world);
 void ScriptingEngine::BindInput(InputManager *input) { m_impl->BindEngine(input); }
 void ScriptingEngine::BindFonts(FontManager *)       { /* fonts accessed via FONT_PATH in TextSystem */ }
 void ScriptingEngine::BindTextures(TextureManager *textures) { m_impl->BindTextures(textures); }
+void ScriptingEngine::BindAudio(AudioManager *audio)         { m_impl->BindAudio(audio); }
 
 void ScriptingEngine::ResetOnUpdate() {
   m_impl->onUpdateFn = sol::function{};

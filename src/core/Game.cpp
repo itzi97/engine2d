@@ -1,5 +1,6 @@
 #include "core/Game.hpp"
 
+#include "audio/AudioManager.hpp"
 #include "ecs/World.hpp"
 #include "ecs/systems/TextSystem.hpp"
 #include "input/InputManager.hpp"
@@ -36,12 +37,14 @@ bool Game::Initialize() {
   m_input     = std::make_unique<InputManager>();
   m_fonts     = std::make_unique<FontManager>();
   m_textures  = std::make_unique<TextureManager>(m_renderer);
+  m_audio     = std::make_unique<AudioManager>();
   m_scripting = std::make_unique<ScriptingEngine>();
 
   m_scripting->BindWorld(m_world.get());
   m_scripting->BindInput(m_input.get());
   m_scripting->BindFonts(m_fonts.get());
   m_scripting->BindTextures(m_textures.get());
+  m_scripting->BindAudio(m_audio.get());
 
   if (!m_scripting->RunString(game_script::source, game_script::name)) {
     SDL_Log("Failed to load game script: %s", game_script::name);
@@ -65,8 +68,6 @@ void Game::Update(float dt) {
   m_world->RunCollision();
   m_world->FlushDestroyQueue();
 
-  // Scene transition: runs after all systems and destroy queue are flushed,
-  // so ClearAll() is safe and no iterator is live.
   if (auto scene = m_scripting->TakePendingScene()) {
     m_world->ClearAll();
     m_scripting->ResetOnUpdate();
@@ -113,6 +114,7 @@ void Game::Shutdown() {
   m_scripting.reset();
   m_world.reset();
   m_textures.reset();
+  m_audio.reset();
   m_fonts.reset();
   m_input.reset();
   SDL_DestroyRenderer(m_renderer);
