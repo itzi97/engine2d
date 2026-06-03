@@ -56,6 +56,22 @@ struct PackedStorage final : IComponentStorage {
       fn(entities[i], components[i]);
   }
 
+  // Iterate in ascending T::layer order.
+  // sortOrder is a cached index buffer: resized and refilled in place each
+  // call, so no heap allocation after the first render pass per storage.
+  template <typename Fn>
+  void ForEachSorted(Fn &&fn) {
+    const size_t n = entities.size();
+    if (n == 0) return;
+    sortOrder.resize(n);
+    std::iota(sortOrder.begin(), sortOrder.end(), 0);
+    std::stable_sort(sortOrder.begin(), sortOrder.end(), [&](size_t a, size_t b) {
+      return components[a].layer < components[b].layer;
+    });
+    for (const size_t i : sortOrder)
+      fn(entities[i], components[i]);
+  }
+
   T &Add(EntityId entity, T &&component) {
     index[entity] = components.size();
     entities.push_back(entity);
@@ -88,11 +104,13 @@ struct PackedStorage final : IComponentStorage {
     components.clear();
     entities.clear();
     index.clear();
+    sortOrder.clear();
   }
 
   std::vector<T>                       components;
   std::vector<EntityId>                entities;
   std::unordered_map<EntityId, size_t> index;
+  std::vector<size_t>                  sortOrder; // reused across frames
 };
 
 // ---------------------------------------------------------------------------
@@ -148,7 +166,7 @@ public:
     while (!m_freeList.empty()) m_freeList.pop();
     m_pendingDestroy.clear();
     m_collisions.clear();
-    m_nextId = 0;  // safe: all storages already cleared above
+    m_nextId = 0;
   }
 
   // ---- Component access ---------------------------------------------------
@@ -181,20 +199,13 @@ public:
     static_cast<PackedStorage<T> *>(it->second.get())->ForEach(std::forward<Fn>(fn));
   }
 
+  // Visits all T components in ascending T::layer order.
+  // No heap allocation after the first call — sortOrder is reused in place.
   template <ComponentType T, typename Fn>
   void ForEachSorted(Fn &&fn) {
     const auto it = m_storages.find(std::type_index(typeid(T)));
     if (it == m_storages.end()) return;
-    auto *storage = static_cast<PackedStorage<T> *>(it->second.get());
-    const size_t n = storage->entities.size();
-    if (n == 0) return;
-    std::vector<size_t> order(n);
-    std::iota(order.begin(), order.end(), 0);
-    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-      return storage->components[a].layer < storage->components[b].layer;
-    });
-    for (const size_t i : order)
-      fn(storage->entities[i], storage->components[i]);
+    static_cast<PackedStorage<T> *>(it->second.get())->ForEachSorted(std::forward<Fn>(fn));
   }
 
   template <ComponentType T>
@@ -245,7 +256,7 @@ private:
   std::queue<EntityId>   m_freeList;
   std::vector<EntityId>  m_pendingDestroy;
   std::vector<Collision> m_collisions;
-  EntityId               m_nextId = 0;  // per-world, no global state
+  EntityId               m_nextId = 0;
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {
