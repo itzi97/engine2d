@@ -29,7 +29,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3)
 
 # -- SDL3_ttf -----------------------------------------------------------------
-set(SDLTTF_VENDORED TRUE CACHE BOOL "" FORCE)   # use bundled FreeType/HarfBuzz
+set(SDLTTF_VENDORED TRUE CACHE BOOL "" FORCE)
 FetchContent_Declare(
     SDL3_ttf
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
@@ -39,11 +39,20 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3_ttf)
 
 # -- SDL3_image ---------------------------------------------------------------
-# Vendored decoders for PNG/JPG/BMP. AVIF disabled — it pulls in dav1d which
-# requires NASM. We never need AV1 image support in a 2D game engine.
+# We only need PNG (+ BMP/JPG as free extras via stb).
+# Disable every format that pulls in a vendored subproject with CMake quirks:
+#   AVIF  -> dav1d  -> requires NASM
+#   JXL   -> libjxl -> heavy
+#   TIF   -> libtiff vendored, then libwebp calls find_package(TIFF) which
+#            calls get_property(LOCATION) on the vendored target — forbidden
+#            by modern CMake (CMP0026). Disabling TIFF also stops libwebp
+#            from pulling that broken FindTIFF path.
+#   WEBP  -> libwebp vendored, triggers the FindTIFF LOCATION crash above.
 set(SDLIMAGE_VENDORED  TRUE  CACHE BOOL "" FORCE)
 set(SDLIMAGE_AVIF      OFF   CACHE BOOL "" FORCE)
-set(SDLIMAGE_JXL       OFF   CACHE BOOL "" FORCE)  # also uses heavy deps
+set(SDLIMAGE_JXL       OFF   CACHE BOOL "" FORCE)
+set(SDLIMAGE_TIF       OFF   CACHE BOOL "" FORCE)
+set(SDLIMAGE_WEBP      OFF   CACHE BOOL "" FORCE)
 FetchContent_Declare(
     SDL3_image
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
