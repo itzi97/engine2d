@@ -15,7 +15,7 @@
 #include <SDL3/SDL.h>
 
 // ---------------------------------------------------------------------------
-// Type-erased storage interface — no Update/Render, systems own that now
+// Type-erased storage interface
 // ---------------------------------------------------------------------------
 struct IComponentStorage {
   virtual ~IComponentStorage() = default;
@@ -24,7 +24,6 @@ struct IComponentStorage {
 
 // ---------------------------------------------------------------------------
 // PackedStorage<T>: contiguous vector + O(1) lookup + swap-and-pop removal
-// Public members let systems iterate without friendship boilerplate.
 // ---------------------------------------------------------------------------
 template <ComponentType T>
 struct PackedStorage final : IComponentStorage {
@@ -101,7 +100,7 @@ public:
     it->second->Erase(entity);
   }
 
-  // Returns the raw storage for type T — used by systems for bulk iteration.
+  // Returns the raw storage for type T -- used by systems for bulk iteration.
   template <ComponentType T>
   [[nodiscard]] PackedStorage<T> *GetStorage() {
     const auto it = m_storages.find(std::type_index(typeid(T)));

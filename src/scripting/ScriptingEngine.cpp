@@ -76,10 +76,8 @@ struct ScriptingEngine::Impl {
                        return {t->position.x, t->position.y};
                      return {0.f, 0.f};
                    });
-
-    // Factory method -- World* is injected atomically, no post-construction step
     w.set_function("add_kinematic", [world](EntityId e) {
-      world->AddKinematic(e);
+      world->AddComponent<KinematicComponent>(e);
     });
     w.set_function("set_velocity",
                    [world](EntityId e, float vx, float vy) {
