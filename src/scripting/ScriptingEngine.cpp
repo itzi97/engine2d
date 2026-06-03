@@ -302,8 +302,9 @@ struct ScriptingEngine::Impl {
   }
 
   void BindAudio(AudioManager *audio) {
-    // engine table already exists (created in BindEngine); just extend it.
-    auto eng = lua.create_named_table("engine");
+    // Extend the existing engine table — do NOT use create_named_table here,
+    // as that would replace the table and wipe bindings set by BindEngine.
+    sol::table eng = lua["engine"];
 
     eng.set_function("load_sfx",
         [audio](const std::string &path) -> int {
