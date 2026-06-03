@@ -196,8 +196,8 @@ void Game::UpdateSnakeStep() {
   }
 
   // 6. Self collision
-  for (EntityId seg : m_snakeBody) {
-    auto *segT = m_world->GetComponent<TransformComponent>(seg);
+  for (std::size_t i = 1; i < m_snakeBody.size(); ++i) {
+    auto *segT = m_world->GetComponent<TransformComponent>(m_snakeBody[i]);
     if (segT && headT->position == segT->position) {
       ResetGame();
       return;
