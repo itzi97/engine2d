@@ -125,7 +125,7 @@ public:
       m_freeList.pop();
       return id;
     }
-    return Entity::Create();
+    return m_nextId++;
   }
 
   void DestroyEntity(EntityId entity) {
@@ -141,16 +141,14 @@ public:
     m_pendingDestroy.clear();
   }
 
-  // Immediately destroy every entity and clear all storages.
-  // Only call this from a safe scene-transition point (never mid-frame).
+  // Wipe every entity and component. Only call from a scene-transition point.
   void ClearAll() {
     for (auto &[type, storage] : m_storages)
       storage->Clear();
-    // Drain the free list and reset the entity counter so IDs restart cleanly.
     while (!m_freeList.empty()) m_freeList.pop();
     m_pendingDestroy.clear();
     m_collisions.clear();
-    Entity::Reset();
+    m_nextId = 0;  // safe: all storages already cleared above
   }
 
   // ---- Component access ---------------------------------------------------
@@ -247,6 +245,7 @@ private:
   std::queue<EntityId>   m_freeList;
   std::vector<EntityId>  m_pendingDestroy;
   std::vector<Collision> m_collisions;
+  EntityId               m_nextId = 0;  // per-world, no global state
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {
