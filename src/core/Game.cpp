@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <iostream>
+#include <random>
 
 // Include Components
 #include "ecs/components/SpriteComponent.hpp"
@@ -172,7 +173,22 @@ void Game::SpawnFood() {
   m_food = m_world->CreateEntity();
 
   auto &t = m_world->AddComponent<TransformComponent>(m_food);
-  t.position = {5.0f * cellSize, 5.0f * cellSize}; // placeholder
+
+  // Static RNG setup
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+
+  // Get number of whole cells that fit horizontally and vertically
+  const int cellsX = static_cast<int>(kWidth / cellSize);
+  const int cellsY = static_cast<int>(kHeight / cellSize);
+
+  std::uniform_int_distribution<int> distX(0, cellsX - 1);
+  std::uniform_int_distribution<int> distY(0, cellsY - 1);
+
+  // TODO: Randomize
+  const float gridX = distX(gen);
+  const float gridY = distY(gen);
+  t.position = {gridX * cellSize, gridY * cellSize}; // placeholder
   t.size = {cellSize, cellSize};
 
   m_world->AddComponent<SpriteComponent>(m_food, &t, SDL_Color{255, 0, 0, 255});
