@@ -1,9 +1,11 @@
 #include "ecs/World.hpp"
+#include "ecs/systems/CollisionSystem.hpp"
 #include "ecs/systems/PhysicsSystem.hpp"
 #include "ecs/systems/RenderSystem.hpp"
 
 void World::Update(float dt) {
   PhysicsSystem::Update(*this, dt);
+  CollisionSystem::Update(*this);  // always run after physics so positions are final
 }
 
 void World::Render(SDL_Renderer *renderer) {

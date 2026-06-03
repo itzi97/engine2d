@@ -113,6 +113,7 @@ set(ENGINE_SOURCES
     src/ecs/World.cpp
     src/ecs/components/KinematicComponent.cpp
     src/ecs/components/SpriteComponent.cpp
+    src/ecs/systems/CollisionSystem.cpp
     src/ecs/systems/PhysicsSystem.cpp
     src/ecs/systems/RenderSystem.cpp
     src/input/InputManager.cpp
