@@ -37,6 +37,22 @@ static SDL_Keycode KeycodeFromString(const std::string &key) {
   return SDLK_UNKNOWN;
 }
 
+// ---------------------------------------------------------------------------
+// Raw-API helper: register a lua_CFunction closure into a named table field.
+// Stack must be clean before calling; it is clean after.
+static void SetRawFunction(lua_State *L, const char *table,
+                           const char *field,
+                           lua_CFunction fn,
+                           void *upvalue) {
+  lua_pushlightuserdata(L, upvalue);
+  lua_pushcclosure(L, fn, 1);
+  lua_getglobal(L, table);
+  lua_insert(L, -2);
+  lua_setfield(L, -2, field);
+  lua_pop(L, 1);
+}
+// ---------------------------------------------------------------------------
+
 struct ScriptingEngine::Impl {
   sol::state    lua;
   sol::function onUpdateFn;
@@ -113,16 +129,32 @@ struct ScriptingEngine::Impl {
         });
 
     // -- Texture API ----------------------------------------------------------
-    w.set_function("set_sprite_texture",
-        [world](EntityId e, SDL_Texture *tex,
-                sol::optional<float> sx, sol::optional<float> sy,
-                sol::optional<float> sw, sol::optional<float> sh) {
-          if (auto *s = world->GetComponent<SpriteComponent>(e)) {
+    // world.set_sprite_texture(e, tex [, sx, sy, sw, sh])
+    // tex is a lightuserdata (SDL_Texture*) from engine.load_texture().
+    // sol2 cannot unpack lightuserdata into SDL_Texture*, so we use a raw
+    // lua_CFunction closure with the World* as an upvalue.
+    {
+      lua_State *L = lua.lua_state();
+      SetRawFunction(L, "world", "set_sprite_texture",
+        [](lua_State *L_) -> int {
+          auto *world_ = static_cast<World *>(lua_touserdata(L_, lua_upvalueindex(1)));
+          auto  e      = static_cast<EntityId>(luaL_checkinteger(L_, 1));
+          if (!lua_islightuserdata(L_, 2))
+            return luaL_error(L_, "set_sprite_texture: arg 2 must be a texture (lightuserdata)");
+          auto *tex = static_cast<SDL_Texture *>(lua_touserdata(L_, 2));
+          float sx = lua_isnoneornil(L_, 3) ? 0.f : static_cast<float>(luaL_checknumber(L_, 3));
+          float sy = lua_isnoneornil(L_, 4) ? 0.f : static_cast<float>(luaL_checknumber(L_, 4));
+          float sw = lua_isnoneornil(L_, 5) ? 0.f : static_cast<float>(luaL_checknumber(L_, 5));
+          float sh = lua_isnoneornil(L_, 6) ? 0.f : static_cast<float>(luaL_checknumber(L_, 6));
+          if (auto *s = world_->GetComponent<SpriteComponent>(e)) {
             s->texture = tex;
-            s->srcRect = { sx.value_or(0.f), sy.value_or(0.f),
-                           sw.value_or(0.f), sh.value_or(0.f) };
+            s->srcRect = {sx, sy, sw, sh};
           }
-        });
+          return 0;
+        },
+        static_cast<void *>(world));
+    }
+
     w.set_function("set_sprite_src",
         [world](EntityId e, float sx, float sy, float sw, float sh) {
           if (auto *s = world->GetComponent<SpriteComponent>(e))
@@ -224,32 +256,21 @@ struct ScriptingEngine::Impl {
 
   void BindTextures(TextureManager *textures) {
     // sol2's develop branch on GCC 16 fatally misdeduces any lambda returning a
-    // raw pointer (SDL_Texture* / char*) — wrapper<char*> lacks function_pointer_type.
-    // Neither sol::as_function nor std::function erasure helps because the trait
-    // resolution happens before those wrappers kick in.
-    // Workaround: register engine.load_texture as a plain lua_CFunction closure
-    // using the raw Lua C API, completely bypassing sol2's type machinery.
+    // raw pointer (SDL_Texture* ~ char*) — wrapper<char*> lacks function_pointer_type.
+    // Workaround: register engine.load_texture as a plain lua_CFunction closure.
     lua_State *L = lua.lua_state();
-
-    // Push the TextureManager* as an upvalue
-    lua_pushlightuserdata(L, static_cast<void *>(textures));
-    lua_pushcclosure(L, [](lua_State *L_) -> int {
-      auto *mgr = static_cast<TextureManager *>(lua_touserdata(L_, lua_upvalueindex(1)));
-      const char *path = luaL_checkstring(L_, 1);
-      SDL_Texture *tex = mgr->Load(std::string(path));
-      if (tex)
-        lua_pushlightuserdata(L_, static_cast<void *>(tex));
-      else
-        lua_pushnil(L_);
-      return 1;
-    }, 1);
-
-    // Store it as engine.load_texture
-    // Stack: [..., closure]
-    lua_getglobal(L, "engine");           // [..., closure, engine_table]
-    lua_insert(L, -2);                    // [..., engine_table, closure]
-    lua_setfield(L, -2, "load_texture"); // engine.load_texture = closure
-    lua_pop(L, 1);                        // pop engine_table
+    SetRawFunction(L, "engine", "load_texture",
+      [](lua_State *L_) -> int {
+        auto *mgr = static_cast<TextureManager *>(lua_touserdata(L_, lua_upvalueindex(1)));
+        const char *path = luaL_checkstring(L_, 1);
+        SDL_Texture *tex = mgr->Load(std::string(path));
+        if (tex)
+          lua_pushlightuserdata(L_, static_cast<void *>(tex));
+        else
+          lua_pushnil(L_);
+        return 1;
+      },
+      static_cast<void *>(textures));
   }
 };
 
