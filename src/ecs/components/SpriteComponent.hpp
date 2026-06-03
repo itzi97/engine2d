@@ -9,8 +9,8 @@ struct SpriteComponent : Component {
   EntityId  owner;
   SDL_Color color{255, 255, 255, 255};
 
-  SpriteComponent(EntityId owner, SDL_Color color = {255, 255, 255, 255})
-      : owner(owner), color(color) {}
+  SpriteComponent(EntityId ownerId, SDL_Color col = {255, 255, 255, 255})
+      : owner(ownerId), color(col) {}
 
   void Render(SDL_Renderer *renderer, World *world) override;
 };

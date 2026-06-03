@@ -5,7 +5,7 @@
 void SpriteComponent::Render(SDL_Renderer *renderer, World *world) {
   if (!renderer || !world)
     return;
-  auto *t = world->GetComponent<TransformComponent>(m_owner);
+  auto *t = world->GetComponent<TransformComponent>(owner);
   if (!t)
     return;
 
@@ -16,6 +16,6 @@ void SpriteComponent::Render(SDL_Renderer *renderer, World *world) {
       t->size.y * t->scale.y,
   };
 
-  SDL_SetRenderDrawColor(renderer, m_color.r, m_color.g, m_color.b, m_color.a);
+  SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
   SDL_RenderFillRect(renderer, &rect);
 }
