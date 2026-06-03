@@ -105,18 +105,35 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-# -- DejaVu Sans font (MIT-compatible, no build dep) -------------------------
-set(FONT_DIR "${CMAKE_SOURCE_DIR}/assets/fonts")
+# -- DejaVu Sans font ---------------------------------------------------------
+# Downloaded from the official GitHub release tarball (stable URL, SHA256-verified).
+# The tarball is extracted once into the build directory; only DejaVuSans.ttf is
+# copied to assets/fonts/ for use at runtime via the FONT_PATH compile definition.
+set(FONT_DIR  "${CMAKE_SOURCE_DIR}/assets/fonts")
 set(FONT_FILE "${FONT_DIR}/DejaVuSans.ttf")
 if(NOT EXISTS "${FONT_FILE}")
-  message(STATUS "Downloading DejaVuSans.ttf...")
+  message(STATUS "Downloading DejaVu fonts release tarball...")
+  set(_DEJAVU_TAR "${CMAKE_BINARY_DIR}/dejavu-fonts-ttf-2.37.tar.bz2")
   file(MAKE_DIRECTORY "${FONT_DIR}")
   file(DOWNLOAD
-    "https://github.com/dejavu-fonts/dejavu-fonts/raw/version_2_37/ttf/DejaVuSans.ttf"
-    "${FONT_FILE}"
-    EXPECTED_HASH SHA256=7b8028f8a2b6f97b3c0cf3ebdab52ac63ae40e9a38c8e23bab037f09e0c01cf6
+    "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2"
+    "${_DEJAVU_TAR}"
+    EXPECTED_HASH SHA256=fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7
     TLS_VERIFY ON
+    SHOW_PROGRESS
   )
+  message(STATUS "Extracting DejaVuSans.ttf...")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E tar xf "${_DEJAVU_TAR}"
+            "dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf"
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  )
+  file(COPY
+    "${CMAKE_BINARY_DIR}/dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf"
+    DESTINATION "${FONT_DIR}"
+  )
+  file(REMOVE "${_DEJAVU_TAR}")
+  file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/dejavu-fonts-ttf-2.37")
 endif()
 
 # -- Embed selected game script -----------------------------------------------
