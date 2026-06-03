@@ -103,8 +103,6 @@ FetchContent_MakeAvailable(nlohmann_json)
 # -- Embed selected game script -----------------------------------------------
 embed_script(${GAME} scripts/${GAME}.lua)
 
-# Pass the selected game name to C++ as a preprocessor definition
-# so Game.cpp knows which embedded:: symbol to call.
 string(TOUPPER "${GAME}" GAME_UPPER)
 add_compile_definitions(GAME_SCRIPT_NAME="${GAME}" GAME_SCRIPT_${GAME_UPPER}=1)
 
@@ -115,6 +113,7 @@ set(ENGINE_SOURCES
     src/ecs/World.cpp
     src/ecs/components/KinematicComponent.cpp
     src/ecs/components/SpriteComponent.cpp
+    src/input/InputManager.cpp
     src/scripting/ScriptingEngine.cpp
 )
 

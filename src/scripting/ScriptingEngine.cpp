@@ -11,12 +11,32 @@
 #include "ecs/components/SpriteComponent.hpp"
 #include "ecs/components/TagComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
+#include "input/InputManager.hpp"
 
 #include <SDL3/SDL.h>
 #include <iostream>
 
+// Map string key names to SDL_Keycode
+static SDL_Keycode KeycodeFromString(const std::string &key) {
+  if (key == "UP")     return SDLK_UP;
+  if (key == "DOWN")   return SDLK_DOWN;
+  if (key == "LEFT")   return SDLK_LEFT;
+  if (key == "RIGHT")  return SDLK_RIGHT;
+  if (key == "W")      return SDLK_W;
+  if (key == "S")      return SDLK_S;
+  if (key == "A")      return SDLK_A;
+  if (key == "D")      return SDLK_D;
+  if (key == "SPACE")  return SDLK_SPACE;
+  if (key == "RETURN") return SDLK_RETURN;
+  if (key == "ESCAPE") return SDLK_ESCAPE;
+  if (key == "R")      return SDLK_R;
+  if (key == "P")      return SDLK_P;
+  if (key == "F")      return SDLK_F;
+  return SDLK_UNKNOWN;
+}
+
 struct ScriptingEngine::Impl {
-  sol::state lua;
+  sol::state   lua;
   sol::function onUpdateFn;
 
   Impl() {
@@ -37,58 +57,47 @@ struct ScriptingEngine::Impl {
     w.set_function("create_entity", [world]() -> EntityId {
       return world->CreateEntity();
     });
-
     w.set_function("destroy_entity", [world](EntityId e) {
       world->DestroyEntity(e);
     });
-
-    // Transform: position + size only, no velocity
     w.set_function("add_transform",
                    [world](EntityId e, float x, float y, float w_, float h_) {
                      auto &t    = world->AddComponent<TransformComponent>(e);
                      t.position = {x, y};
                      t.size     = {w_, h_};
                    });
-
     w.set_function("set_position",
                    [world](EntityId e, float x, float y) {
                      if (auto *t = world->GetComponent<TransformComponent>(e))
                        t->position = {x, y};
                    });
-
     w.set_function("get_position",
                    [world](EntityId e) -> std::tuple<float, float> {
                      if (auto *t = world->GetComponent<TransformComponent>(e))
                        return {t->position.x, t->position.y};
                      return {0.f, 0.f};
                    });
-
-    // Kinematic: velocity lives here now
     w.set_function("add_kinematic",
                    [world](EntityId e) {
                      auto &k = world->AddComponent<KinematicComponent>(e, e);
                      k.world = world;
                    });
-
     w.set_function("set_velocity",
                    [world](EntityId e, float vx, float vy) {
                      if (auto *k = world->GetComponent<KinematicComponent>(e))
                        k->velocity = {vx, vy};
                    });
-
     w.set_function("get_velocity",
                    [world](EntityId e) -> std::tuple<float, float> {
                      if (auto *k = world->GetComponent<KinematicComponent>(e))
                        return {k->velocity.x, k->velocity.y};
                      return {0.f, 0.f};
                    });
-
     w.set_function("set_acceleration",
                    [world](EntityId e, float ax, float ay) {
                      if (auto *k = world->GetComponent<KinematicComponent>(e))
                        k->acceleration = {ax, ay};
                    });
-
     w.set_function("add_sprite",
                    [world](EntityId e, int r, int g, int b, int a) {
                      world->AddComponent<SpriteComponent>(
@@ -97,39 +106,58 @@ struct ScriptingEngine::Impl {
                                    static_cast<Uint8>(b),
                                    static_cast<Uint8>(a)});
                    });
-
     w.set_function("add_tag",
                    [world](EntityId e, const std::string &tag) {
                      world->AddComponent<TagComponent>(e).tag = tag;
                    });
-
     w.set_function("get_tag", [world](EntityId e) -> std::string {
-      if (auto *t = world->GetComponent<TagComponent>(e))
-        return t->tag;
+      if (auto *t = world->GetComponent<TagComponent>(e)) return t->tag;
       return "";
     });
   }
 
-  void BindEngine() {
+  void BindEngine(InputManager *input) {
     auto eng = lua.create_named_table("engine");
 
     eng.set_function("on_update", [this](sol::function fn) {
       onUpdateFn = fn;
     });
 
-    eng.set_function("is_key_pressed", [](const std::string &key) -> bool {
-      const bool *keys = SDL_GetKeyboardState(nullptr);
-      if (key == "UP")     return keys[SDL_SCANCODE_UP];
-      if (key == "DOWN")   return keys[SDL_SCANCODE_DOWN];
-      if (key == "LEFT")   return keys[SDL_SCANCODE_LEFT];
-      if (key == "RIGHT")  return keys[SDL_SCANCODE_RIGHT];
-      if (key == "W")      return keys[SDL_SCANCODE_W];
-      if (key == "S")      return keys[SDL_SCANCODE_S];
-      if (key == "A")      return keys[SDL_SCANCODE_A];
-      if (key == "D")      return keys[SDL_SCANCODE_D];
-      if (key == "ESCAPE") return keys[SDL_SCANCODE_ESCAPE];
-      return false;
-    });
+    // Polling (held)
+    eng.set_function("is_key_pressed",
+                     [input](const std::string &key) -> bool {
+                       return input->IsKeyPressed(KeycodeFromString(key));
+                     });
+
+    // Single-frame down
+    eng.set_function("is_key_just_pressed",
+                     [input](const std::string &key) -> bool {
+                       return input->IsKeyJustPressed(KeycodeFromString(key));
+                     });
+
+    // Single-frame up
+    eng.set_function("is_key_just_released",
+                     [input](const std::string &key) -> bool {
+                       return input->IsKeyJustReleased(KeycodeFromString(key));
+                     });
+
+    // Mouse
+    eng.set_function("is_mouse_pressed",
+                     [input](int btn) -> bool {
+                       return input->IsMousePressed(btn);
+                     });
+    eng.set_function("is_mouse_just_pressed",
+                     [input](int btn) -> bool {
+                       return input->IsMouseJustPressed(btn);
+                     });
+    eng.set_function("is_mouse_just_released",
+                     [input](int btn) -> bool {
+                       return input->IsMouseJustReleased(btn);
+                     });
+    eng.set_function("mouse_position",
+                     [input]() -> std::tuple<float, float> {
+                       return {input->MouseX(), input->MouseY()};
+                     });
   }
 };
 
@@ -138,7 +166,10 @@ ScriptingEngine::~ScriptingEngine() = default;
 
 void ScriptingEngine::BindWorld(World *world) {
   m_impl->BindWorld(world);
-  m_impl->BindEngine();
+}
+
+void ScriptingEngine::BindInput(InputManager *input) {
+  m_impl->BindEngine(input);
 }
 
 void ScriptingEngine::CallOnUpdate(float dt) {
