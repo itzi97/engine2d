@@ -9,7 +9,6 @@
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
-#include <iostream>
 
 #include "game_script_shim.hpp"
 
@@ -62,7 +61,6 @@ bool Game::Initialize() {
 void Game::ProcessEvents(bool &running) {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
-    std::cout << "[SDL] event type=0x" << std::hex << event.type << std::dec << "\n";
     if (event.type == SDL_EVENT_QUIT) running = false;
     m_input->ProcessEvent(event);
   }
@@ -91,28 +89,28 @@ void Game::Render() {
 
 void Game::Run() {
   using namespace std::chrono;
-  auto  previous    = steady_clock::now();
-  bool  running     = true;
-  float accumulator = 0.f;
+  auto previous = steady_clock::now();
+  bool running  = true;
 
   while (running) {
+    // 1. Clear one-frame transition flags BEFORE polling new events.
     m_input->EndFrame();
 
-    const auto  now = steady_clock::now();
-    const float raw = static_cast<float>(
-        duration<double>(now - previous).count());
-    previous = now;
-
-    const float dt = (raw < 0.05f) ? raw : 0.05f;
-
+    // 2. Pump all pending SDL events.
     ProcessEvents(running);
 
-    accumulator += dt;
-    while (accumulator >= kFixedDt) {
-      Update(kFixedDt);
-      accumulator -= kFixedDt;
-    }
+    // 3. Compute delta time.
+    const auto  now = steady_clock::now();
+    const float dt  = std::min(
+        static_cast<float>(duration<double>(now - previous).count()),
+        0.05f);  // cap at 50ms to avoid spiral-of-death on pause
+    previous = now;
 
+    // 4. Update once per rendered frame — input state is fresh and
+    //    m_justPressed won't be cleared until the next iteration.
+    Update(dt);
+
+    // 5. Render.
     Render();
   }
 }
