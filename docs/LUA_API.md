@@ -54,6 +54,13 @@ If it is not set, no per-frame logic will run.
 | `world.add_texture_sprite(id, tex, sx, sy, sw, sh)` | — | Add a textured sprite with source rect |
 | `world.set_layer(id, layer)` | — | Set render layer (lower = drawn first) |
 
+### Text
+
+| Function | Returns | Description |
+|---|---|---|
+| `world.add_text(id, text, size, r, g, b)` | — | Add a TextComponent. The entity needs a TransformComponent for position. |
+| `world.set_text(id, text)` | — | Update the displayed string on an existing TextComponent |
+
 ### Tags
 
 | Function | Returns | Description |
@@ -65,7 +72,13 @@ If it is not set, no per-frame logic will run.
 
 | Function | Returns | Description |
 |---|---|---|
-| `world.get_collisions_tagged(tag)` | `table` of `{a, b}` pairs | All collisions involving an entity with the given tag |
+| `world.get_collisions_for(id)` | `table` of `{a, b}` pairs | All collisions involving a specific entity this frame |
+| `world.get_collisions_tagged(tag)` | `table` of `{a, b}` pairs | All collisions involving any entity with the given tag |
+
+`get_collisions_for` is the right choice when you already have the entity ID
+(e.g. querying the ball in Breakout). `get_collisions_tagged` is more useful
+when you want all collisions for a category of entities (e.g. all `"enemy"`
+hits) without tracking individual IDs.
 
 ---
 
@@ -77,6 +90,7 @@ If it is not set, no per-frame logic will run.
 |---|---|
 | `engine.on_update(fn)` | Register per-frame callback. `fn` receives `dt` (seconds). |
 | `engine.quit()` | Request engine shutdown at end of current frame. |
+| `engine.load_scene(fn)` | Tear down all current entities and re-run `fn` as the new scene init. Used for resets and scene transitions. |
 
 ### Input
 
@@ -120,11 +134,18 @@ world.add_texture_sprite(player, tex, 0, 0, 32, 32)
 world.add_tag(player, "player")
 world.set_layer(player, 1)
 
+-- HUD text
+local hud = world.create_entity()
+world.add_transform(hud, 10, 4, 0, 0)
+world.add_text(hud, "Score: 0", 22, 255, 255, 255)
+
 -- Spawn a wall
 local wall = world.create_entity()
 world.add_transform(wall, 200, 100, 32, 32)
 world.add_sprite(wall, 80, 80, 255, 255)
 world.add_tag(wall, "wall")
+
+local score = 0
 
 engine.on_update(function(dt)
     -- Movement
@@ -141,11 +162,12 @@ engine.on_update(function(dt)
         engine.quit()
     end
 
-    -- Collision response
-    for _, col in ipairs(world.get_collisions_tagged("player")) do
+    -- Collision response (by entity ID)
+    for _, col in ipairs(world.get_collisions_for(player)) do
         local other = col.a == player and col.b or col.a
         if world.get_tag(other) == "wall" then
-            -- handle wall collision
+            score = score + 1
+            world.set_text(hud, "Score: " .. score)
         end
     end
 end)
