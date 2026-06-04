@@ -17,11 +17,12 @@ local gear_idx   = 2   -- start at "normal"
 local PIN_X = VIEW_W * 0.5 - TILE * 0.5
 local PIN_Y = VIEW_H * 0.3
 
--- Atlas frames (row 5 of the Kenney Tiny Ski sheet, 0-indexed tiles)
+-- Atlas frames
 local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
 local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
--- FRAME_PUSH is the same sprite as FRAME_STEER (leaning pose doubles as push)
-local FRAME_PUSH  = FRAME_STEER
+
+-- Tilt angle (degrees) applied when steering
+local TILT = 15
 
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
 
@@ -47,7 +48,8 @@ world.add_tag(player, "player")
 
 engine.set_camera(spawn_x - PIN_X, spawn_y - PIN_Y)
 
-local last_frame = FRAME_IDLE
+local last_frame    = FRAME_IDLE
+local last_rotation = 0
 
 local function set_frame(f)
   if f ~= last_frame then
@@ -56,10 +58,17 @@ local function set_frame(f)
   end
 end
 
+local function set_rotation(deg)
+  if deg ~= last_rotation then
+    world.set_rotation(player, deg)
+    last_rotation = deg
+  end
+end
+
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
-  -- ── Gear shifting ──────────────────────────────────────────────────────────
+  -- ── Gear shifting ────────────────────────────────────────────────────────
   local pushing = engine.is_key_pressed("down")
 
   if engine.is_key_just_pressed("up") then
@@ -82,18 +91,21 @@ engine.on_update(function(dt)
 
   world.set_velocity(player, vx, vy)
 
-  -- ── Sprite selection ─────────────────────────────────────────────────────
-  -- pushing (down held) and steering share the same leaning frame
+  -- ── Sprite + tilt ────────────────────────────────────────────────────────
   if pushing or left or right then
     set_frame(FRAME_STEER)
   else
     set_frame(FRAME_IDLE)
   end
 
-  if vx < 0 then
+  if left then
     world.set_sprite_flip(player, true, false)
-  elseif vx > 0 then
+    set_rotation(-TILT)        -- lean left
+  elseif right then
     world.set_sprite_flip(player, false, false)
+    set_rotation(TILT)         -- lean right
+  else
+    set_rotation(0)            -- snap back upright
   end
 
   -- ── Camera follow ───────────────────────────────────────────────────────
