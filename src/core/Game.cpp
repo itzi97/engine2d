@@ -9,6 +9,7 @@
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
+#include <iostream>
 
 #include "game_script_shim.hpp"
 
@@ -63,6 +64,7 @@ void Game::ProcessEvents(bool &running) {
 }
 
 void Game::Update(float dt) {
+  std::cout << "[Game] Update dt=" << dt << "\n";
   m_world->Update(dt);
   m_scripting->CallOnUpdate(dt);
   m_world->RunCollision();
@@ -97,19 +99,18 @@ void Game::Run() {
 
     const float dt = (raw < 0.05f) ? raw : 0.05f;
 
-    // 1. Poll — fills m_curr with fresh key states for this real frame.
     ProcessEvents(running);
 
-    // 2. Fixed-step ticks — Lua sees curr vs prev from last real frame.
     accumulator += dt;
+    std::cout << "[Game] frame raw=" << raw
+              << " acc=" << accumulator
+              << " kFixedDt=" << kFixedDt << "\n";
+
     while (accumulator >= kFixedDt) {
       Update(kFixedDt);
       accumulator -= kFixedDt;
     }
 
-    // 3. Snapshot — prev = curr, ready for the next real frame.
-    //    Must come AFTER all Update ticks so IsKeyJustPressed fires for
-    //    exactly one real frame per physical key-down event.
     m_input->EndFrame();
 
     Render();
