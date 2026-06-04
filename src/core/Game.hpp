@@ -28,8 +28,10 @@ private:
   void RegisterScenes();
 
   static constexpr std::string_view kTitle  = "engine2d";
-  static constexpr int              kWidth  = 1280;
-  static constexpr int              kHeight = 720;
+  // 31 tiles * 16 px  = 496
+  // 18 tiles * 16 px  = 288
+  static constexpr int              kWidth  = 496;
+  static constexpr int              kHeight = 288;
 
   SDL_Window   *m_window{nullptr};
   SDL_Renderer *m_renderer{nullptr};

@@ -18,9 +18,6 @@ Game::Game()  = default;
 Game::~Game() = default;
 
 void Game::RegisterScenes() {
-  // Register all named scenes here.
-  // The embedded game_script runs first (from CMake GAME= selection);
-  // scene files live in scripts/scenes/ and are loaded by path at runtime.
   m_scenes->Register("menu",   "scripts/scenes/menu.lua");
   m_scenes->Register("ski",    "scripts/scenes/ski.lua");
   m_scenes->Register("finish", "scripts/scenes/finish.lua");
@@ -47,6 +44,13 @@ bool Game::Initialize() {
     return false;
   }
 
+  // Lock the logical resolution to the map size so that if the user
+  // resizes the window SDL scales+letterboxes rather than breaking
+  // tile coordinates.
+  SDL_SetRenderLogicalPresentation(
+      m_renderer, kWidth, kHeight,
+      SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
   m_world     = std::make_unique<World>();
   m_input     = std::make_unique<InputManager>();
   m_fonts     = std::make_unique<FontManager>();
@@ -65,8 +69,6 @@ bool Game::Initialize() {
   m_scripting->BindAudio(m_audio.get());
 
 #ifdef HOTRELOAD_ENABLED
-  // Watch the active scene file; reload it when it changes on disk.
-  // The active path is updated by SceneManager::Load each transition.
   m_hotReload->Watch("scripts/scenes/ski.lua",    [this]{ m_scenes->Load("ski"); });
   m_hotReload->Watch("scripts/scenes/menu.lua",   [this]{ m_scenes->Load("menu"); });
   m_hotReload->Watch("scripts/scenes/finish.lua", [this]{ m_scenes->Load("finish"); });
