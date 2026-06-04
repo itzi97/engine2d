@@ -13,9 +13,13 @@
 #include "ecs/components/TextComponent.hpp"
 #include "ecs/components/TransformComponent.hpp"
 
+#include "map/MapLoader.hpp"
+#include "map/MapSystem.hpp"
+#include "rendering/TextureManager.hpp"
+
 #include <SDL3/SDL.h>
 
-void BindWorld(sol::state &lua, World *world) {
+void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
   auto w = lua.create_named_table("world");
 
   // --- Entity lifecycle ---------------------------------------------------
@@ -218,6 +222,66 @@ void BindWorld(sol::state &lua, World *world) {
           auto row = lua.create_table();
           row["a"] = c.a; row["b"] = c.b;
           tbl[i++] = row;
+        }
+        return tbl;
+      });
+
+  // --- Tiled map loading --------------------------------------------------
+  // world.load_tiled_map(path) -> table
+  //
+  // Parses a Tiled JSON map, spawns all tile-layer entities automatically,
+  // and returns a table of object-layer entities for Lua to wire up:
+  //
+  //   local objects = world.load_tiled_map("assets/maps/level1.tmj")
+  //   local player  = objects["player"]       -- by object name
+  //   local spawns  = objects["spawn"]         -- first object with type "spawn"
+  //
+  // Each value in the table is a sub-table:
+  //   { entity, x, y, w, h, name, type, properties }
+  // where properties is a key→string table of all custom Tiled properties.
+  //
+  // Tile-layer entities are spawned silently (TransformComponent +
+  // SpriteComponent). You usually don't need to touch them from Lua.
+  w.set_function("load_tiled_map",
+      [&lua, world, textures](const std::string &path) -> sol::table {
+        TiledMap map;
+        try {
+            map = MapLoader::Load(path);
+        } catch (const std::exception &e) {
+            SDL_Log("world.load_tiled_map: %s", e.what());
+            return lua.create_table();
+        }
+
+        SpawnResult result = MapSystem::Spawn(map, *world, *textures);
+
+        // Build the return table keyed by object name (or "object_N" fallback).
+        // If multiple objects share the same name, later ones overwrite earlier
+        // ones — use unique names in Tiled for reliable lookup.
+        auto tbl = lua.create_table();
+        for (std::size_t i = 0; i < result.objectEntities.size(); ++i) {
+            const EntityId  e   = result.objectEntities[i];
+            const MapObject &mo = result.objects[i];
+
+            // Build the per-object sub-table
+            auto obj = lua.create_table();
+            obj["entity"] = e;
+            obj["x"]      = mo.x;
+            obj["y"]      = mo.y;
+            obj["w"]      = mo.w;
+            obj["h"]      = mo.h;
+            obj["name"]   = mo.name;
+            obj["type"]   = mo.type;
+
+            auto props = lua.create_table();
+            for (const auto &[k, v] : mo.properties)
+                props[k] = v;
+            obj["properties"] = props;
+
+            // Key by name, fall back to "object_N"
+            const std::string key = mo.name.empty()
+                ? ("object_" + std::to_string(i + 1))
+                : mo.name;
+            tbl[key] = obj;
         }
         return tbl;
       });
