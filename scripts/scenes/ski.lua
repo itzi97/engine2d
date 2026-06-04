@@ -12,14 +12,12 @@ engine.set_window_size(VIEW_W, VIEW_H)
 engine.set_window_title("Tiny Ski")
 
 -- ── Game constants ────────────────────────────────────────────────────────
-local GRAVITY  = 200
-local STEER    = 90
-local MAX_SPD  = 280
-local CAM_LERP = 0.08
+local SPEED   = 120   -- pixels/sec in any direction
+local MAX_SPD = 280
 
--- Sprite frames (stride = 16, no gap — _packed variant)
-local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }  -- sticks normal
-local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }  -- sticks behind
+-- Sprite frames (stride = 16, no gap)
+local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
+local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
 
 -- ── Boot ──────────────────────────────────────────────────────────────────
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
@@ -52,35 +50,33 @@ engine.set_camera(
 )
 
 -- ── Update loop ───────────────────────────────────────────────────────────
-local steering = false  -- track previous steering state to avoid redundant set_sprite_src calls
+local steering = false
 
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
-  -- ── Input & physics ─────────────────────────────────────────────────────
-  local vx, vy = world.get_velocity(player)
-  vy = vy + GRAVITY * dt
-
   local left  = engine.is_key_pressed("left")
   local right = engine.is_key_pressed("right")
+  local up    = engine.is_key_pressed("up")
+  local down  = engine.is_key_pressed("down")
 
-  if left then
-    vx = vx - STEER * dt
-  elseif right then
-    vx = vx + STEER * dt
-  else
-    vx = vx * (1.0 - 4.0 * dt)
-  end
+  local vx = 0
+  local vy = 0
 
-  local spd = math.sqrt(vx * vx + vy * vy)
-  if spd > MAX_SPD then
-    local inv = MAX_SPD / spd
+  if left  then vx = -SPEED end
+  if right then vx =  SPEED end
+  if up    then vy = -SPEED end
+  if down  then vy =  SPEED end
+
+  -- Normalise diagonal so speed stays consistent
+  if vx ~= 0 and vy ~= 0 then
+    local inv = SPEED / math.sqrt(vx*vx + vy*vy)
     vx, vy = vx * inv, vy * inv
   end
 
   world.set_velocity(player, vx, vy)
 
-  -- ── Sprite: sticks-behind while steering, sticks-normal otherwise ──────────
+  -- ── Sprite: sticks-behind while steering left/right, idle otherwise ──────
   local is_steering = left or right
   if is_steering ~= steering then
     steering = is_steering
@@ -88,10 +84,10 @@ engine.on_update(function(dt)
     world.set_sprite_src(player, f.x, f.y, f.w, f.h)
   end
 
-  -- ── Flip sprite left when going left ──────────────────────────────────
-  if vx < -5 then
+  -- Flip sprite to face direction of horizontal travel
+  if vx < 0 then
     world.set_sprite_flip(player, true, false)
-  elseif vx > 5 then
+  elseif vx > 0 then
     world.set_sprite_flip(player, false, false)
   end
 
@@ -99,8 +95,8 @@ engine.on_update(function(dt)
   local px, py = world.get_position(player)
   local cx, cy = engine.get_camera()
   engine.set_camera(
-    cx + (px - VIEW_W * 0.5 + TILE * 0.5 - cx) * CAM_LERP,
-    cy + (py - VIEW_H * 0.3              - cy) * CAM_LERP
+    cx + (px - VIEW_W * 0.5 + TILE * 0.5 - cx) * 0.12,
+    cy + (py - VIEW_H * 0.3              - cy) * 0.12
   )
 
   -- ── AABB tile collision ─────────────────────────────────────────────────
@@ -113,8 +109,7 @@ engine.on_update(function(dt)
   local bottom = py + ph
   if solid(px + pw*0.5, bottom) or solid(px+1, bottom) or solid(px+pw-1, bottom) then
     world.set_position(player, px, math.floor(bottom/TILE)*TILE - ph)
-    px, py = world.get_position(player)
-    if vy > 0 then world.set_velocity(player, vx, 0); vy = 0 end
+    if vy > 0 then world.set_velocity(player, vx, 0) end
   end
   if solid(px, py + ph*0.5) then
     world.set_position(player, math.floor(px/TILE)*TILE + TILE, py)
