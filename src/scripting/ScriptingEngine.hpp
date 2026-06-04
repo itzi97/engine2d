@@ -9,6 +9,7 @@ class FontManager;
 class InputManager;
 class TextureManager;
 class World;
+struct SDL_Window;
 
 class ScriptingEngine {
 public:
@@ -16,7 +17,7 @@ public:
   ~ScriptingEngine(); // out-of-line so Impl is complete at destruction
 
   void BindWorld(World *world);
-  void BindInput(InputManager *input);
+  void BindInput(InputManager *input, SDL_Window *window);
   void BindFonts(FontManager *fonts);
   void BindTextures(TextureManager *textures);
   void BindAudio(AudioManager *audio);
@@ -29,6 +30,6 @@ public:
   bool RunString(std::string_view src, std::string_view chunkName = "?");
 
 private:
-  struct Impl;                    // defined in ScriptingEngine.cpp
+  struct Impl;
   std::unique_ptr<Impl> m_impl;
 };

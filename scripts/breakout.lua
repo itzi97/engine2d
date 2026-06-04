@@ -1,6 +1,9 @@
 -- breakout.lua
 -- Controls: LEFT / RIGHT arrows to move paddle. R to reset.
 
+engine.set_window_title("Breakout")
+engine.set_window_size(1280, 720)
+
 local W, H   = 1280, 720
 local BALL_S = 16
 local PAD_W, PAD_H     = 120, 14
@@ -11,7 +14,7 @@ local BRICK_OFFSET_X = 43
 local BRICK_OFFSET_Y = 60
 local PAD_SPEED      = 520
 
--- ── helpers ─────────────────────────────────────────────────────────────────
+-- ── helpers ───────────────────────────────────────────────────────────────────────────
 
 local function make_entity(x, y, w, h, r, g, b)
   local e = world.create_entity()
@@ -32,7 +35,7 @@ local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   end
 end
 
--- ── init (runs on first load and on every engine.load_scene(init)) ──────────
+-- ── init (runs on first load and on every engine.load_scene(init)) ────────────
 
 local function init()
   local ball_entity   = make_entity(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
@@ -71,11 +74,10 @@ local function init()
   local game_over = false
   local won       = false
 
-  -- ── update ────────────────────────────────────────────────────────────────
+  -- ── update ───────────────────────────────────────────────────────────────────
 
   engine.on_update(function(dt)
     if game_over or won then
-      -- R reloads the scene from scratch via the engine
       if engine.is_key_pressed("R") then engine.load_scene(init) end
       return
     end

@@ -16,6 +16,7 @@
 #include "rendering/TextureManager.hpp"
 #include "ecs/World.hpp"
 
+#include <SDL3/SDL.h>
 #include <iostream>
 
 struct ScriptingEngine::Impl {
@@ -38,8 +39,8 @@ ScriptingEngine::~ScriptingEngine() = default;
 void ScriptingEngine::BindWorld(World *world) {
   ::BindWorld(m_impl->lua, world);
 }
-void ScriptingEngine::BindInput(InputManager *input) {
-  ::BindEngine(m_impl->lua, input, m_impl->onUpdateFn, m_impl->pendingScene);
+void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window) {
+  ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn, m_impl->pendingScene);
 }
 void ScriptingEngine::BindFonts(FontManager *) {
   // fonts accessed via FONT_PATH compile-time constant in TextSystem

@@ -1,11 +1,14 @@
 -- snake.lua
 
+engine.set_window_title("Snake")
+engine.set_window_size(1280, 704)  -- 40 cols x 22 rows x 32px
+
 local CELL  = 32
 local COLS  = 40
 local ROWS  = 22
 local STEP  = 1/10
 
--- ── helpers ─────────────────────────────────────────────────────────────────
+-- ── helpers ───────────────────────────────────────────────────────────────────────────
 
 local function make_segment(x, y, r, g, b)
   local e = world.create_entity()
@@ -28,7 +31,7 @@ local function spawn_food(snake_body)
   return x, y
 end
 
--- ── init (runs on first load and on every engine.load_scene(init)) ──────────
+-- ── init (runs on first load and on every engine.load_scene(init)) ────────────
 
 local function init()
   math.randomseed(os.time and os.time() or 12345)
@@ -52,7 +55,7 @@ local function init()
   world.add_transform(score_entity, 10, 4, 0, 0)
   world.add_text(score_entity, "Length: 1", 22, 255, 255, 255)
 
-  -- ── snake step ────────────────────────────────────────────────────────────
+  -- ── snake step ─────────────────────────────────────────────────────────────
 
   local function snake_step()
     dir = next_dir
@@ -90,7 +93,7 @@ local function init()
     end
   end
 
-  -- ── update ────────────────────────────────────────────────────────────────
+  -- ── update ───────────────────────────────────────────────────────────────────
 
   engine.on_update(function(dt)
     if engine.is_key_pressed("UP")    and dir.y ~=  1 then next_dir = {x=0,  y=-1} end

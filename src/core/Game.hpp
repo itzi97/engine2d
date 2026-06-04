@@ -24,18 +24,19 @@ private:
   void Update(float dt);
   void Render();
 
-  static constexpr std::string_view kTitle    = "2D Engine";
-  static constexpr int              kWidth    = 800;
-  static constexpr int              kHeight   = 600;
-  static constexpr float            kFixedDt  = 1.f / 60.f;
+  // Defaults — Lua scripts may override via engine.set_window_size / set_window_title.
+  static constexpr std::string_view kTitle   = "engine2d";
+  static constexpr int              kWidth   = 1280;
+  static constexpr int              kHeight  = 720;
+  static constexpr float            kFixedDt = 1.f / 60.f;
 
   SDL_Window   *m_window{nullptr};
   SDL_Renderer *m_renderer{nullptr};
 
-  std::unique_ptr<World>          m_world;
-  std::unique_ptr<InputManager>   m_input;
-  std::unique_ptr<FontManager>    m_fonts;
-  std::unique_ptr<TextureManager> m_textures;
-  std::unique_ptr<AudioManager>   m_audio;
+  std::unique_ptr<World>           m_world;
+  std::unique_ptr<InputManager>    m_input;
+  std::unique_ptr<FontManager>     m_fonts;
+  std::unique_ptr<TextureManager>  m_textures;
+  std::unique_ptr<AudioManager>    m_audio;
   std::unique_ptr<ScriptingEngine> m_scripting;
 };

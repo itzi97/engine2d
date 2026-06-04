@@ -8,9 +8,10 @@
 #include <SDL3/SDL.h>
 #include <iostream>
 
-void BindEngine(sol::state &lua,
-                InputManager *input,
-                sol::function &onUpdateOut,
+void BindEngine(sol::state            &lua,
+                InputManager          *input,
+                SDL_Window            *window,
+                sol::function         &onUpdateOut,
                 std::function<void()> &pendingSceneOut) {
   auto eng = lua.create_named_table("engine");
 
@@ -35,6 +36,14 @@ void BindEngine(sol::state &lua,
       [input](int b) { return input->IsMouseJustReleased(b); });
   eng.set_function("mouse_position",
       [input]() -> std::tuple<float, float> { return {input->MouseX(), input->MouseY()}; });
+
+  // --- Window -------------------------------------------------------------
+  eng.set_function("set_window_size", [window](int w, int h) {
+    SDL_SetWindowSize(window, w, h);
+  });
+  eng.set_function("set_window_title", [window](const std::string &title) {
+    SDL_SetWindowTitle(window, title.c_str());
+  });
 
   // --- Scene management ---------------------------------------------------
   eng.set_function("load_scene", [&pendingSceneOut](sol::function fn) {

@@ -21,7 +21,7 @@ bool Game::Initialize() {
     return false;
   }
 
-  m_window = SDL_CreateWindow(kTitle.data(), kWidth, kHeight, 0);
+  m_window = SDL_CreateWindow(kTitle.data(), kWidth, kHeight, SDL_WINDOW_RESIZABLE);
   if (!m_window) {
     SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
     return false;
@@ -44,7 +44,7 @@ bool Game::Initialize() {
   m_scripting = std::make_unique<ScriptingEngine>();
 
   m_scripting->BindWorld(m_world.get());
-  m_scripting->BindInput(m_input.get());
+  m_scripting->BindInput(m_input.get(), m_window);
   m_scripting->BindFonts(m_fonts.get());
   m_scripting->BindTextures(m_textures.get());
   m_scripting->BindAudio(m_audio.get());
