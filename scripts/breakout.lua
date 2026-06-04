@@ -1,5 +1,5 @@
 -- breakout.lua  (loaded at runtime via dofile from main_menu)
--- Controls: LEFT/RIGHT to move. ESCAPE = pause/unpause. R = retry on game over.
+-- Controls: LEFT/RIGHT to move. ESCAPE = pause. R = resume. M = main menu.
 
 engine.set_window_title("Breakout")
 engine.set_window_size(1280, 720)
@@ -33,6 +33,56 @@ local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   else
     return ot < ob and "top" or "bottom"
   end
+end
+
+-- ─── pause overlay ─────────────────────────────────────────────────────────
+
+local function make_pause_overlay()
+  local cx = W / 2
+
+  local bg = world.create_entity()
+  world.add_transform(bg, cx - 160, H/2 - 90, 320, 160)
+  world.add_sprite(bg, 20, 20, 20, 200, 20)
+
+  local title = world.create_entity()
+  world.add_transform(title, cx - 68, H/2 - 78, 0, 0)
+  world.add_text(title, "PAUSED", 32, 255, 220, 80)
+
+  local opt1 = world.create_entity()
+  world.add_transform(opt1, cx - 60, H/2 - 30, 0, 0)
+  world.add_text(opt1, "Resume", 26, 180, 180, 180)
+
+  local opt2 = world.create_entity()
+  world.add_transform(opt2, cx - 75, H/2 + 8, 0, 0)
+  world.add_text(opt2, "Main Menu", 26, 180, 180, 180)
+
+  local hint = world.create_entity()
+  world.add_transform(hint, cx - 128, H/2 + 46, 0, 0)
+  world.add_text(hint, "UP/DOWN  ENTER  or  R / M", 18, 100, 100, 100)
+
+  local SEL_COL   = {255, 220, 80}
+  local UNSEL_COL = {180, 180, 180}
+
+  local function refresh(sel)
+    if sel == 1 then
+      world.set_text_color(opt1, SEL_COL[1],   SEL_COL[2],   SEL_COL[3],   255)
+      world.set_text_color(opt2, UNSEL_COL[1], UNSEL_COL[2], UNSEL_COL[3], 255)
+    else
+      world.set_text_color(opt1, UNSEL_COL[1], UNSEL_COL[2], UNSEL_COL[3], 255)
+      world.set_text_color(opt2, SEL_COL[1],   SEL_COL[2],   SEL_COL[3],   255)
+    end
+  end
+
+  return {
+    show = function(sel) refresh(sel) end,
+    hide = function()
+      world.set_text(title, "")
+      world.set_text(opt1,  "")
+      world.set_text(opt2,  "")
+      world.set_text(hint,  "")
+      world.add_sprite(bg, 0, 0, 0, 0, 20)
+    end,
+  }
 end
 
 -- ─── game over screen ───────────────────────────────────────────────────
@@ -120,22 +170,48 @@ function init()
   world.add_transform(score_entity, 10, 4, 0, 0)
   world.add_text(score_entity, "Score: 0", 22, 255, 255, 255)
 
-  local pause_entity = world.create_entity()
-  world.add_transform(pause_entity, W/2 - 80, H/2 - 20, 0, 0)
-  world.add_text(pause_entity, "", 40, 255, 220, 80)
-
-  local score  = 0
-  local paused = false
+  local score        = 0
+  local paused       = false
+  local pause_sel    = 1
   local total_bricks = BRICK_COLS * BRICK_ROWS
+
+  local overlay = make_pause_overlay()
+  overlay.hide()
 
   -- ── update ───────────────────────────────────────────────────────────
   engine.on_update(function(dt)
+    -- toggle pause
     if engine.is_key_just_pressed("ESCAPE") then
       paused = not paused
-      world.set_text(pause_entity, paused and "PAUSED" or "")
+      if paused then
+        pause_sel = 1
+        overlay.show(pause_sel)
+      else
+        overlay.hide()
+      end
       return
     end
-    if paused then return end
+
+    if paused then
+      if engine.is_key_just_pressed("UP") or engine.is_key_just_pressed("DOWN") then
+        pause_sel = (pause_sel == 1) and 2 or 1
+        overlay.show(pause_sel)
+      end
+      if engine.is_key_just_pressed("R") then
+        paused = false; overlay.hide(); return
+      end
+      if engine.is_key_just_pressed("M") then
+        engine.load_scene(function() dofile("scripts/main_menu.lua") end); return
+      end
+      if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
+        if pause_sel == 1 then
+          paused = false; overlay.hide()
+        else
+          engine.load_scene(function() dofile("scripts/main_menu.lua") end)
+        end
+      end
+      return
+    end
 
     -- paddle
     local px, py = world.get_position(paddle_entity)
@@ -160,7 +236,6 @@ function init()
 
     world.set_position(ball_entity, bx, by)
 
-    -- collisions
     local hits    = world.get_collisions_for(ball_entity)
     local bounced = false
     local alive_count = total_bricks

@@ -1,5 +1,5 @@
 -- snake.lua  (loaded at runtime via dofile from main_menu)
--- Controls: arrow keys. ESCAPE = pause/unpause.
+-- Controls: arrow keys. ESCAPE = pause. R = resume. M = main menu.
 
 engine.set_window_title("Snake")
 engine.set_window_size(1280, 704)
@@ -31,6 +31,59 @@ local function spawn_food(snake_body)
     end
   until not hit
   return x, y
+end
+
+-- ─── pause overlay ─────────────────────────────────────────────────────────
+-- Returns a controller table with :show(sel) and :hide().
+-- `sel` is 1 = Resume highlighted, 2 = Main Menu highlighted.
+
+local function make_pause_overlay()
+  local cx = W / 2
+
+  local bg = world.create_entity()
+  world.add_transform(bg, cx - 160, 270, 320, 160)
+  world.add_sprite(bg, 20, 20, 20, 200, 20)
+
+  local title = world.create_entity()
+  world.add_transform(title, cx - 68, 282, 0, 0)
+  world.add_text(title, "PAUSED", 32, 255, 220, 80)
+
+  local opt1 = world.create_entity()
+  world.add_transform(opt1, cx - 60, 330, 0, 0)
+  world.add_text(opt1, "Resume", 26, 180, 180, 180)
+
+  local opt2 = world.create_entity()
+  world.add_transform(opt2, cx - 75, 368, 0, 0)
+  world.add_text(opt2, "Main Menu", 26, 180, 180, 180)
+
+  local hint = world.create_entity()
+  world.add_transform(hint, cx - 128, 406, 0, 0)
+  world.add_text(hint, "UP/DOWN  ENTER  or  R / M", 18, 100, 100, 100)
+
+  local SEL_COL   = {255, 220, 80}
+  local UNSEL_COL = {180, 180, 180}
+
+  local function refresh(sel)
+    if sel == 1 then
+      world.set_text_color(opt1, SEL_COL[1],   SEL_COL[2],   SEL_COL[3],   255)
+      world.set_text_color(opt2, UNSEL_COL[1], UNSEL_COL[2], UNSEL_COL[3], 255)
+    else
+      world.set_text_color(opt1, UNSEL_COL[1], UNSEL_COL[2], UNSEL_COL[3], 255)
+      world.set_text_color(opt2, SEL_COL[1],   SEL_COL[2],   SEL_COL[3],   255)
+    end
+  end
+
+  return {
+    show = function(sel) refresh(sel) end,
+    hide = function()
+      -- tint everything invisible (alpha 0 not supported in text; just blank text)
+      world.set_text(title, "")
+      world.set_text(opt1,  "")
+      world.set_text(opt2,  "")
+      world.set_text(hint,  "")
+      world.add_sprite(bg, 0, 0, 0, 0, 20)
+    end,
+  }
 end
 
 -- ─── game over screen ───────────────────────────────────────────────────
@@ -97,6 +150,7 @@ function init()
   local accumulator = 0
   local score       = 1
   local paused      = false
+  local pause_sel   = 1   -- 1 = Resume, 2 = Main Menu
 
   local food_entity = world.create_entity()
   do
@@ -109,9 +163,8 @@ function init()
   world.add_transform(score_entity, 10, 4, 0, 0)
   world.add_text(score_entity, "Length: 1", 22, 255, 255, 255)
 
-  local pause_entity = world.create_entity()
-  world.add_transform(pause_entity, W/2 - 80, 320, 0, 0)
-  world.add_text(pause_entity, "", 40, 255, 220, 80)
+  local overlay = make_pause_overlay()
+  overlay.hide()
 
   -- ── snake step ───────────────────────────────────────────────────────
   local function snake_step()
@@ -125,18 +178,15 @@ function init()
       prev = {x = sx, y = sy}
     end
     local nhx, nhy = world.get_position(head)
-    -- wall collision
     if nhx < 0 or nhy < 0 or nhx >= COLS*CELL or nhy >= ROWS*CELL then
       engine.load_scene(function() game_over(score) end); return
     end
-    -- self collision (skip head vs segment[1])
     for i = 2, #body do
       local sx, sy = world.get_position(body[i])
       if nhx == sx and nhy == sy then
         engine.load_scene(function() game_over(score) end); return
       end
     end
-    -- food
     local fx, fy = world.get_position(food_entity)
     if nhx == fx and nhy == fy then
       local seg = make_segment(-CELL, -CELL, 0, 200, 0)
@@ -152,12 +202,41 @@ function init()
 
   -- ── update ───────────────────────────────────────────────────────────
   engine.on_update(function(dt)
+    -- toggle pause
     if engine.is_key_just_pressed("ESCAPE") then
       paused = not paused
-      world.set_text(pause_entity, paused and "PAUSED" or "")
+      if paused then
+        pause_sel = 1
+        overlay.show(pause_sel)
+      else
+        overlay.hide()
+      end
       return
     end
-    if paused then return end
+
+    if paused then
+      -- navigate
+      if engine.is_key_just_pressed("UP") or engine.is_key_just_pressed("DOWN") then
+        pause_sel = (pause_sel == 1) and 2 or 1
+        overlay.show(pause_sel)
+      end
+      -- direct shortcuts
+      if engine.is_key_just_pressed("R") then
+        paused = false; overlay.hide(); return
+      end
+      if engine.is_key_just_pressed("M") then
+        engine.load_scene(function() dofile("scripts/main_menu.lua") end); return
+      end
+      -- confirm with ENTER
+      if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
+        if pause_sel == 1 then
+          paused = false; overlay.hide()
+        else
+          engine.load_scene(function() dofile("scripts/main_menu.lua") end)
+        end
+      end
+      return
+    end
 
     if engine.is_key_pressed("UP")    and dir.y ~=  1 then next_dir = {x=0,  y=-1} end
     if engine.is_key_pressed("DOWN")  and dir.y ~= -1 then next_dir = {x=0,  y= 1} end
