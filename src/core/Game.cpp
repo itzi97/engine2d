@@ -28,6 +28,9 @@ bool Game::Initialize() {
     return false;
   }
 
+  // Request keyboard focus — without this some WMs don't deliver key events.
+  SDL_RaiseWindow(m_window);
+
   m_renderer = SDL_CreateRenderer(m_window, nullptr);
   if (!m_renderer) {
     SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
@@ -64,7 +67,6 @@ void Game::ProcessEvents(bool &running) {
 }
 
 void Game::Update(float dt) {
-  std::cout << "[Game] Update dt=" << dt << "\n";
   m_world->Update(dt);
   m_scripting->CallOnUpdate(dt);
   m_world->RunCollision();
@@ -102,10 +104,6 @@ void Game::Run() {
     ProcessEvents(running);
 
     accumulator += dt;
-    std::cout << "[Game] frame raw=" << raw
-              << " acc=" << accumulator
-              << " kFixedDt=" << kFixedDt << "\n";
-
     while (accumulator >= kFixedDt) {
       Update(kFixedDt);
       accumulator -= kFixedDt;

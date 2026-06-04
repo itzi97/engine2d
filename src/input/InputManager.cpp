@@ -1,16 +1,11 @@
 #include "input/InputManager.hpp"
 #include <SDL3/SDL.h>
-#include <iostream>
 
 void InputManager::ProcessEvent(const SDL_Event &event) {
   switch (event.type) {
     case SDL_EVENT_KEY_DOWN:
-      if (!event.key.repeat) {
-        std::cout << "[Input] KEY_DOWN key=0x" << std::hex << event.key.key
-                  << " scan=" << std::dec << (int)event.key.scancode
-                  << " name='" << SDL_GetKeyName(event.key.key) << "'\n";
+      if (!event.key.repeat)
         m_justPressed.insert(event.key.key);
-      }
       m_curr[event.key.key] = true;
       break;
 
@@ -40,10 +35,6 @@ void InputManager::ProcessEvent(const SDL_Event &event) {
 }
 
 void InputManager::EndFrame() {
-  if (!m_justPressed.empty()) {
-    std::cout << "[Input] EndFrame clearing " << m_justPressed.size()
-              << " justPressed entries\n";
-  }
   m_justPressed.clear();
   m_justReleased.clear();
   m_mouseJustPressed.clear();
@@ -56,10 +47,7 @@ bool InputManager::IsKeyPressed(SDL_Keycode key) const {
 }
 
 bool InputManager::IsKeyJustPressed(SDL_Keycode key) const {
-  const bool result = m_justPressed.count(key) > 0;
-  std::cout << "[Input] IsKeyJustPressed key=0x" << std::hex << key
-            << " -> " << (result ? "TRUE" : "false") << std::dec << "\n";
-  return result;
+  return m_justPressed.count(key) > 0;
 }
 
 bool InputManager::IsKeyJustReleased(SDL_Keycode key) const {
