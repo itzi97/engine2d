@@ -16,8 +16,10 @@ void World::Update(float dt) {
 }
 
 void World::RunCollision() {
-  // TODO: spatial hash broadphase — current O(n²) AABB check is fine up to
-  // ~200 entities; beyond that, partition by cell and only test neighbours.
+  // Broadphase: SpatialHash (SpatialHash.hpp) bins entities into a uniform
+  // grid (cell size kCellSize) so only entities sharing a cell are tested.
+  // Cost is roughly O(n) for typical scenes; O(n²) worst case only when all
+  // entities are in the same cell (tune kCellSize in CollisionSystem.cpp).
   CollisionSystem::Update(*this);
 }
 
