@@ -182,6 +182,11 @@ set(ENGINE_SOURCES
     src/rendering/FontManager.cpp
     src/rendering/TextureManager.cpp
     src/scripting/ScriptingEngine.cpp
+    src/scripting/bindings/KeycodeFromString.cpp
+    src/scripting/bindings/BindWorld.cpp
+    src/scripting/bindings/BindEngine.cpp
+    src/scripting/bindings/BindTextures.cpp
+    src/scripting/bindings/BindAudio.cpp
 )
 
 add_executable(${PROJECT_NAME} ${ENGINE_SOURCES})
