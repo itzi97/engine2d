@@ -173,8 +173,6 @@ set(ENGINE_SOURCES
     src/audio/AudioManager.cpp
     src/audio/stb_vorbis_impl.c
     src/ecs/World.cpp
-    src/ecs/components/KinematicComponent.cpp
-    src/ecs/components/SpriteComponent.cpp
     src/ecs/systems/AnimationSystem.cpp
     src/ecs/systems/CollisionSystem.cpp
     src/ecs/systems/PhysicsSystem.cpp
