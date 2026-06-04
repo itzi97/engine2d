@@ -9,8 +9,9 @@ engine.set_window_size(1280, 720)
 local W, H = 1280, 720
 
 local games = {
-  { label = "Snake",   file = "scripts/snake.lua"    },
-  { label = "Breakout", file = "scripts/breakout.lua" },
+  { label = "Snake",     file = "scripts/snake.lua"     },
+  { label = "Breakout",  file = "scripts/breakout.lua"  },
+  { label = "Asteroids", file = "scripts/asteroids.lua" },
 }
 local selected = 1
 
