@@ -4,6 +4,7 @@
 
 class InputManager;
 class SceneManager;
+class World;
 struct SDL_Window;
 
 void BindEngine(sol::state            &lua,
@@ -11,4 +12,5 @@ void BindEngine(sol::state            &lua,
                 SDL_Window            *window,
                 sol::function         &onUpdateOut,
                 std::function<void()> &pendingSceneOut,
-                SceneManager          *scenes = nullptr);
+                SceneManager          *scenes,
+                World                 *world);

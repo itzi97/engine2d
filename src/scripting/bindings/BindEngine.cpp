@@ -5,6 +5,7 @@
 #include "scripting/bindings/KeycodeFromString.hpp"
 #include "input/InputManager.hpp"
 #include "core/SceneManager.hpp"
+#include "ecs/World.hpp"
 
 #include <SDL3/SDL.h>
 #include <iostream>
@@ -14,7 +15,8 @@ void BindEngine(sol::state            &lua,
                 SDL_Window            *window,
                 sol::function         &onUpdateOut,
                 std::function<void()> &pendingSceneOut,
-                SceneManager          *scenes) {
+                SceneManager          *scenes,
+                World                 *world) {
   auto eng = lua.create_named_table("engine");
 
   eng.set_function("on_update", [&onUpdateOut](sol::function fn) {
@@ -47,9 +49,19 @@ void BindEngine(sol::state            &lua,
     SDL_SetWindowTitle(window, title.c_str());
   });
 
+  // --- Camera -------------------------------------------------------------
+  eng.set_function("set_camera", [world](float x, float y) {
+    if (world) world->SetCamera(x, y);
+  });
+  eng.set_function("get_camera", [world]() -> std::tuple<float, float> {
+    if (world) return {world->CamX(), world->CamY()};
+    return {0.f, 0.f};
+  });
+  eng.set_function("move_camera", [world](float dx, float dy) {
+    if (world) world->SetCamera(world->CamX() + dx, world->CamY() + dy);
+  });
+
   // --- Scene management ---------------------------------------------------
-  // engine.scene.load("ski")  -- named scene from SceneManager registry
-  // engine.load_scene(fn)     -- legacy: raw Lua callback (kept for compat)
   auto sceneTable = lua.create_named_table("scene");
   if (scenes) {
     sceneTable.set_function("load", [scenes](const std::string &name) {

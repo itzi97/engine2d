@@ -27,6 +27,7 @@ struct ScriptingEngine::Impl {
   std::function<void()> pendingScene;
   bool                  loggedOnUpdateCheck = false;
   std::optional<TiledMap> lastMap;
+  World                *world = nullptr;
 
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
@@ -41,13 +42,14 @@ ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
 ScriptingEngine::~ScriptingEngine() = default;
 
 void ScriptingEngine::BindWorld(World *world, TextureManager *textures) {
+  m_impl->world = world;
   ::BindWorld(m_impl->lua, world, textures, m_impl->lastMap);
   ::BindMapValidation(m_impl->lua, &m_impl->lastMap);
 }
 void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window,
                                 SceneManager *scenes) {
   ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn,
-               m_impl->pendingScene, scenes);
+               m_impl->pendingScene, scenes, m_impl->world);
 }
 void ScriptingEngine::BindFonts(FontManager *) {}
 void ScriptingEngine::BindTextures(TextureManager *textures) {

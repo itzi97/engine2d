@@ -15,6 +15,7 @@
 
 #include "map/MapLoader.hpp"
 #include "map/MapSystem.hpp"
+#include "map/TiledMap.hpp"
 #include "rendering/TextureManager.hpp"
 
 #include <SDL3/SDL.h>
@@ -182,7 +183,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
       });
 
   // Returns a Lua array of entity IDs that have the given tag.
-  // Usage: local obstacles = world.get_entities_tagged("obstacle")
   w.set_function("get_entities_tagged",
       [&lua, world](const std::string &tag) -> sol::table {
         auto tbl = lua.create_table();
@@ -193,11 +193,9 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
       });
 
   // Returns a Lua array of ALL entity IDs that have a TagComponent.
-  // Tag everything you want to be able to query — untagged entities are invisible here.
   w.set_function("get_all_entities",
       [&lua, world]() -> sol::table {
         auto tbl = lua.create_table();
-        // Collect from tag storage — every entity scripts care about should be tagged.
         const auto it = world->View<TagComponent>();
         for (std::size_t i = 0; i < it.entities.size(); ++i)
           tbl[static_cast<int>(i + 1)] = it.entities[i];
@@ -269,6 +267,27 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
           tbl[i++] = row;
         }
         return tbl;
+      });
+
+  // --- Tile solid query ---------------------------------------------------
+  // world.is_tile_solid(col, row) -> bool
+  // Returns true if any layer whose name contains "solid" or "collision"
+  // has a non-zero tile GID at (col, row).
+  w.set_function("is_tile_solid",
+      [&lastMap](int col, int row) -> bool {
+        if (!lastMap) return false;
+        for (const auto &layer : lastMap->tileLayers) {
+          const auto &n = layer.name;
+          const bool isSolidLayer =
+              n.find("solid")     != std::string::npos ||
+              n.find("collision") != std::string::npos;
+          if (!isSolidLayer) continue;
+          if (row < 0 || col < 0) return false;
+          const int idx = row * layer.width + col;
+          if (idx < 0 || idx >= static_cast<int>(layer.data.size())) return false;
+          if (layer.data[idx] != 0) return true;
+        }
+        return false;
       });
 
   // --- Tiled map loading --------------------------------------------------

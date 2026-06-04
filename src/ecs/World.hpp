@@ -168,7 +168,14 @@ public:
     m_pendingDestroy.clear();
     m_collisions.clear();
     m_nextId = 0;
+    m_camX   = 0.f;
+    m_camY   = 0.f;
   }
+
+  // --- Camera -------------------------------------------------------------
+  void  SetCamera(float x, float y) noexcept { m_camX = x; m_camY = y; }
+  float CamX() const noexcept { return m_camX; }
+  float CamY() const noexcept { return m_camY; }
 
   template <ComponentType T, typename... Args>
   T &AddComponent(EntityId entity, Args &&...args) {
@@ -255,6 +262,8 @@ private:
   std::vector<EntityId>  m_pendingDestroy;
   std::vector<Collision> m_collisions;
   EntityId               m_nextId = 0;
+  float                  m_camX   = 0.f;
+  float                  m_camY   = 0.f;
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {

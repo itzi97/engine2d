@@ -18,6 +18,9 @@ static inline void RotatePoint(float px, float py,
 }
 
 void RenderSystem::Render(World &world, SDL_Renderer *renderer) {
+  const float camX = world.CamX();
+  const float camY = world.CamY();
+
   // ForEachSorted visits sprites in ascending layer order.
   world.ForEachSorted<SpriteComponent>([&](EntityId entity, const SpriteComponent &s) {
     if (!s.visible) return;  // hidden — skip entirely
@@ -26,7 +29,8 @@ void RenderSystem::Render(World &world, SDL_Renderer *renderer) {
     if (!t) return;
 
     const SDL_FRect dst{
-        t->position.x, t->position.y,
+        t->position.x - camX,
+        t->position.y - camY,
         t->size.x * t->scale.x,
         t->size.y * t->scale.y,
     };
