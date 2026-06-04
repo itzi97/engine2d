@@ -1,8 +1,7 @@
--- ski.lua — Kenney Tiny Ski game scene
--- Loads sampleMap.tmj, spawns the skier from a Tiled object named "spawn",
--- applies gravity + left/right steering, and follows the player with a
--- lerp camera. AABB collision is resolved against any layer named
--- "solid" or "collision" in the map.
+-- scripts/scenes/ski.lua
+-- Kenney Tiny Ski — full game scene.
+-- Loaded by SceneManager when scene.load("ski") is called.
+-- Tiles, player entity, gravity, steering, lerp camera, tile AABB.
 
 local TILE     = 16
 local GRAVITY  = 200    -- px/s² downward
@@ -10,7 +9,7 @@ local STEER    = 90     -- lateral acceleration px/s²
 local MAX_SPD  = 280    -- px/s max resultant speed
 local CAM_LERP = 0.08   -- camera smoothing (0 = frozen, 1 = snap)
 
--- Viewport dimensions (must match Game::kWidth / kHeight)
+-- Must match Game::kWidth / kHeight
 local VIEW_W = 1280
 local VIEW_H = 720
 
@@ -18,7 +17,7 @@ local VIEW_H = 720
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
 
 -- Resolve spawn point from Tiled object layer.
--- Accepts an object whose name or type equals "spawn".
+-- Accepts an object whose name or type equals "spawn"; falls back to (40, 40).
 local spawn_x, spawn_y = 40, 40
 for _, obj in pairs(objects) do
   if obj.type == "spawn" or obj.name == "spawn" then
@@ -31,7 +30,7 @@ end
 local atlas = engine.load_texture("assets/ski/tilemap_packed.png")
 
 -- ── Player entity ─────────────────────────────────────────────────────────────
--- Skier-down sprite: first tile in the atlas, column 0 row 0 → src (0, 0, 16, 16).
+-- Skier-down sprite: column 0, row 0 in the atlas → src rect (0, 0, 16, 16).
 local player = world.create_entity()
 world.add_transform(player, spawn_x, spawn_y, TILE, TILE)
 world.add_sprite(player, 255, 255, 255, 255, 10)
@@ -47,15 +46,15 @@ engine.set_camera(
 )
 
 -- ── Update loop ───────────────────────────────────────────────────────────────
-engine.on_update(function(dt)
-  -- ESC quits
+engine.on_update = function(dt)
+  -- ESC quits.
   if engine.is_key_just_pressed("ESCAPE") then
     engine.quit()
   end
 
   local vx, vy = world.get_velocity(player)
 
-  -- Gravity always pulls straight down.
+  -- Gravity pulls straight down.
   vy = vy + GRAVITY * dt
 
   -- Left / right steering; bleed lateral speed when no key held.
@@ -88,7 +87,7 @@ engine.on_update(function(dt)
   )
 
   -- ── Tile AABB collision ───────────────────────────────────────────────────
-  -- Re-read position after PhysicsSystem has already integrated velocity.
+  -- Re-read position after PhysicsSystem has integrated velocity.
   px, py = world.get_position(player)
   local pw, ph = TILE, TILE
 
@@ -119,4 +118,4 @@ engine.on_update(function(dt)
     world.set_position(player, math.floor((px + pw) / TILE) * TILE - pw, py)
     if vx > 0 then world.set_velocity(player, 0, vy) end
   end
-end)
+end
