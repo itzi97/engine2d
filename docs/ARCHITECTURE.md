@@ -133,3 +133,73 @@ The current broadphase is O(n²) over all entities with a `TransformComponent`
 queried by Lua via `engine.get_collisions_tagged`.
 
 A spatial hash broadphase is the planned replacement.
+
+---
+
+## Known Invariants
+
+Things that must stay true. Break any of these and the engine misbehaves
+silently rather than crashing loudly.
+
+- **`PackedStorage` index sync** — `index[e]` must equal the current slot of
+  entity `e` at all times. Every mutation path (`Add`, `Erase`, `Clear`) must
+  update `index`. If you add a new mutation, update `index` too.
+
+- **`EndFrame` before poll** — `InputManager::EndFrame()` must run before
+  `SDL_PollEvent` each frame, or `IsKeyJustPressed` will always return false.
+
+- **`FlushDestroyQueue` after all reads** — destroyed entities are still alive
+  until `FlushDestroyQueue` runs. Never read from a destroyed entity's
+  components after flushing has occurred in the same frame.
+
+- **sol2 stays in `src/scripting/`** — `<sol/sol.hpp>` must never appear
+  outside `src/scripting/`. Forward-declare `sol::state` via the namespace
+  stub if a header outside scripting needs to reference it.
+
+- **`sortDirty` on direct layer mutation** — if you write to a component's
+  `.layer` field directly (not via `Add`), call `world.MarkSortDirty<T>()`
+  or render order will silently use stale data.
+
+---
+
+## Conventions
+
+Quick reference for staying consistent across the codebase.
+
+### Naming
+
+| Thing | Style | Example |
+|---|---|---|
+| Types / structs | `PascalCase` | `PackedStorage`, `TransformComponent` |
+| Functions / methods | `PascalCase` | `CreateEntity()`, `ForEachSorted()` |
+| Member variables | `m_camelCase` | `m_storages`, `m_nextId` |
+| Local variables | `camelCase` | `sortOrder`, `deltaTime` |
+| Constants | `kPascalCase` | `kFixedDt` |
+| Template params | Short uppercase | `T`, `Fn` |
+
+### New component
+
+Header-only struct in `src/ecs/components/`. No `.cpp` unless there is
+non-trivial implementation.
+
+### New system
+
+Free function `void XSystem::Update(World&, ...)` in `src/ecs/systems/`.
+Register the call in `World::Update` or `World::Render`.
+
+### New Lua binding
+
+1. `src/scripting/bindings/BindFoo.hpp` — forward-declare only, no sol2 include.
+2. `src/scripting/bindings/BindFoo.cpp` — `SOL_ALL_SAFETIES_ON` + `<sol/sol.hpp>` + implementation.
+3. Call `::BindFoo(m_impl->lua, ...)` from `ScriptingEngine.cpp`.
+4. Add `BindFoo.cpp` to `ENGINE_SOURCES` in `CMakeLists.txt`.
+5. Document new functions in `docs/LUA_API.md`.
+
+### Commit style
+
+```
+<type>(<scope>): <short description>
+```
+
+Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `perf`  
+Scopes: `ecs`, `scripting`, `audio`, `input`, `rendering`, `core`, `build`, `docs`

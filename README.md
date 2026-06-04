@@ -49,10 +49,9 @@ cmake --build build --config Release
 
 | Document | Contents |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ECS design, module boundaries, storage internals |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ECS design, module boundaries, invariants, conventions |
 | [docs/MAIN_LOOP.md](docs/MAIN_LOOP.md) | Frame order, fixed timestep, correctness invariants |
 | [docs/LUA_API.md](docs/LUA_API.md) | Full Lua scripting reference with examples |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Coding conventions, commit style, PR flow |
 
 ## Status
 
