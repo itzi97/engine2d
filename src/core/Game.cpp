@@ -9,7 +9,6 @@
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
-#include <iostream>
 
 #include "game_script_shim.hpp"
 
@@ -94,6 +93,10 @@ void Game::Run() {
   float accumulator = 0.f;
 
   while (running) {
+    // 1. Clear one-frame transition flags from the previous logical tick
+    //    BEFORE polling so fresh events fill m_justPressed cleanly.
+    m_input->EndFrame();
+
     const auto  now = steady_clock::now();
     const float raw = static_cast<float>(
         duration<double>(now - previous).count());
@@ -101,15 +104,17 @@ void Game::Run() {
 
     const float dt = (raw < 0.05f) ? raw : 0.05f;
 
+    // 2. Pump all pending SDL events into InputManager.
     ProcessEvents(running);
 
+    // 3. Run as many fixed-step ticks as the accumulator allows.
+    //    m_justPressed survives here because EndFrame() won't fire
+    //    again until the top of the next real-frame iteration.
     accumulator += dt;
     while (accumulator >= kFixedDt) {
       Update(kFixedDt);
       accumulator -= kFixedDt;
     }
-
-    m_input->EndFrame();
 
     Render();
   }
