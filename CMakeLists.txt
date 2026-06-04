@@ -186,6 +186,7 @@ set(ENGINE_SOURCES
     src/scripting/bindings/BindEngine.cpp
     src/scripting/bindings/BindTextures.cpp
     src/scripting/bindings/BindAudio.cpp
+    src/scripting/bindings/BindMapValidation.cpp
 )
 
 add_executable(${PROJECT_NAME} ${ENGINE_SOURCES})

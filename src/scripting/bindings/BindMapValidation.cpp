@@ -5,6 +5,7 @@
 #include "map/TiledMap.hpp"
 
 #include <SDL3/SDL.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,7 +22,6 @@ struct ValidationResult {
 static ValidationResult ValidateMap(const TiledMap &map) {
     ValidationResult r;
 
-    // -- Global sanity -------------------------------------------------------
     if (map.tileW <= 0 || map.tileH <= 0) {
         r.errors.push_back("map tile size is zero or negative (tileW="
             + std::to_string(map.tileW) + " tileH=" + std::to_string(map.tileH) + ")");
@@ -32,7 +32,6 @@ static ValidationResult ValidateMap(const TiledMap &map) {
         r.warnings.push_back("map has no tilesets — tile layers will render nothing");
     }
 
-    // Max GID derivable from tilesets (rough upper bound)
     int maxGid = 0;
     for (const auto &ts : map.tilesets) {
         if (ts.tileW <= 0 || ts.tileH <= 0 || ts.columns <= 0) {
@@ -45,13 +44,12 @@ static ValidationResult ValidateMap(const TiledMap &map) {
             r.warnings.push_back("tileset firstGid=" + std::to_string(ts.firstGid)
                 + " has no imagePath — will not render");
         }
-        // We can't know image pixel dimensions here, so just track firstGid
         maxGid = std::max(maxGid, ts.firstGid);
     }
+    (void)maxGid;
 
-    // -- Tile layers ---------------------------------------------------------
     for (std::size_t i = 0; i < map.tileLayers.size(); ++i) {
-        const auto &tl   = map.tileLayers[i];
+        const auto &tl = map.tileLayers[i];
         const std::string id = "tilelayer[" + std::to_string(i) + "]"
                              + (tl.name.empty() ? "" : (" '" + tl.name + "'"));
 
@@ -68,7 +66,6 @@ static ValidationResult ValidateMap(const TiledMap &map) {
             r.ok = false;
         }
 
-        // Scan for GID anomalies
         int nonZero = 0;
         for (int gid : tl.data) {
             if (gid < 0) {
@@ -83,15 +80,13 @@ static ValidationResult ValidateMap(const TiledMap &map) {
         }
     }
 
-    // -- Object layers -------------------------------------------------------
-    // Compute map pixel extent for bounds checking
     const float mapPixW = (map.tileLayers.empty() ? 0.f :
         static_cast<float>(map.tileLayers[0].width  * map.tileW));
     const float mapPixH = (map.tileLayers.empty() ? 0.f :
         static_cast<float>(map.tileLayers[0].height * map.tileH));
 
     for (std::size_t li = 0; li < map.objectLayers.size(); ++li) {
-        const auto &ol   = map.objectLayers[li];
+        const auto &ol = map.objectLayers[li];
         const std::string lid = "objectlayer[" + std::to_string(li) + "]"
                               + (ol.name.empty() ? "" : (" '" + ol.name + "'"));
 
@@ -102,15 +97,10 @@ static ValidationResult ValidateMap(const TiledMap &map) {
             if (mo.type.empty()) {
                 r.warnings.push_back(oid + ": has no type/class — scripts may ignore it");
             }
-
-            // Negative position is allowed (off-screen spawn), but warn
             if (mo.x < 0.f || mo.y < 0.f) {
                 r.warnings.push_back(oid + ": position (" + std::to_string(mo.x)
                     + "," + std::to_string(mo.y) + ") is off map origin");
             }
-
-            // Bounds check against map pixel extent (only meaningful when
-            // tile layers exist; skip if mapPixW/H is 0)
             if (mapPixW > 0.f && mapPixH > 0.f) {
                 if (mo.x > mapPixW || mo.y > mapPixH) {
                     r.warnings.push_back(oid + ": position (" + std::to_string(mo.x)
@@ -118,8 +108,6 @@ static ValidationResult ValidateMap(const TiledMap &map) {
                         + std::to_string(mapPixW) + "x" + std::to_string(mapPixH) + ")");
                 }
             }
-
-            // Rectangles (w/h > 0) — check for sensible size
             if (mo.w < 0.f || mo.h < 0.f) {
                 r.errors.push_back(oid + ": negative width or height");
                 r.ok = false;
@@ -134,27 +122,27 @@ static ValidationResult ValidateMap(const TiledMap &map) {
 // Binding
 // ---------------------------------------------------------------------------
 
-// lastMap is a pointer to the TiledMap stored by the binding owner after
-// load_tiled_map succeeds. It may be null if no map has been loaded yet.
-void BindMapValidation(sol::state &lua, const TiledMap *lastMap) {
+void BindMapValidation(sol::state &lua, std::optional<TiledMap> *lastMap) {
     auto w = lua["world"].get<sol::table>();
 
-    // world.validate_map() — validates the most-recently loaded map.
-    // Returns { ok=bool, warnings={...}, errors={...} }
+    // Capture pointer-to-optional (not pointer-to-value) so this lambda
+    // always sees whatever load_tiled_map wrote, even if it ran after
+    // BindMapValidation was called.
     w.set_function("validate_map",
         [&lua, lastMap]() -> sol::table {
             auto tbl = lua.create_table();
 
-            if (!lastMap) {
+            if (!lastMap || !lastMap->has_value()) {
                 tbl["ok"] = false;
                 auto errs = lua.create_table();
                 errs[1] = "no map has been loaded yet";
                 tbl["errors"]   = errs;
                 tbl["warnings"] = lua.create_table();
+                SDL_Log("[map validate] ERROR no map has been loaded yet");
                 return tbl;
             }
 
-            const ValidationResult r = ValidateMap(*lastMap);
+            const ValidationResult r = ValidateMap(lastMap->value());
 
             tbl["ok"] = r.ok;
 
@@ -168,8 +156,6 @@ void BindMapValidation(sol::state &lua, const TiledMap *lastMap) {
                 errs[static_cast<int>(i + 1)] = r.errors[i];
             tbl["errors"] = errs;
 
-            // Mirror to SDL_Log so it shows up in the engine console even if
-            // the script never inspects the return value
             for (const auto &w_ : r.warnings)
                 SDL_Log("[map validate] WARN  %s", w_.c_str());
             for (const auto &e_ : r.errors)

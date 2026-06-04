@@ -26,10 +26,10 @@ struct ScriptingEngine::Impl {
   sol::state            lua;
   sol::function         onUpdateFn;
   std::function<void()> pendingScene;
-  bool                  loggedOnUpdateCheck = false;  // fires once on frame 1
+  bool                  loggedOnUpdateCheck = false;
 
-  // Owns the most-recently loaded TiledMap so that world.validate_map()
-  // always has a stable pointer to inspect.
+  // Owns the most-recently loaded TiledMap. Address is stable (heap via
+  // unique_ptr<Impl>); BindMapValidation captures a pointer to this field.
   std::optional<TiledMap> lastMap;
 
   Impl() {
@@ -46,18 +46,14 @@ ScriptingEngine::~ScriptingEngine() = default;
 
 void ScriptingEngine::BindWorld(World *world, TextureManager *textures) {
   ::BindWorld(m_impl->lua, world, textures, m_impl->lastMap);
-  // validate_map() reads from lastMap; pass nullptr until first successful
-  // load_tiled_map() call (BindMapValidation re-reads via the stored pointer
-  // each invocation, so it picks up updates automatically).
-  ::BindMapValidation(m_impl->lua,
-      m_impl->lastMap.has_value() ? &m_impl->lastMap.value() : nullptr);
+  // Pass &lastMap (pointer-to-optional) so validate_map() always resolves
+  // through the live optional regardless of when load_tiled_map is called.
+  ::BindMapValidation(m_impl->lua, &m_impl->lastMap);
 }
 void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window) {
   ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn, m_impl->pendingScene);
 }
-void ScriptingEngine::BindFonts(FontManager *) {
-  // fonts accessed via FONT_PATH compile-time constant in TextSystem
-}
+void ScriptingEngine::BindFonts(FontManager *) {}
 void ScriptingEngine::BindTextures(TextureManager *textures) {
   ::BindTextures(m_impl->lua, textures);
 }
@@ -66,8 +62,8 @@ void ScriptingEngine::BindAudio(AudioManager *audio) {
 }
 
 void ScriptingEngine::ResetOnUpdate() {
-  m_impl->onUpdateFn         = sol::function{};
-  m_impl->loggedOnUpdateCheck = false;  // re-arm for the next scene
+  m_impl->onUpdateFn          = sol::function{};
+  m_impl->loggedOnUpdateCheck = false;
 }
 
 std::function<void()> ScriptingEngine::TakePendingScene() {
