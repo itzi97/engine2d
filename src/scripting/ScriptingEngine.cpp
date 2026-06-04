@@ -23,6 +23,7 @@ struct ScriptingEngine::Impl {
   sol::state            lua;
   sol::function         onUpdateFn;
   std::function<void()> pendingScene;
+  bool                  loggedOnUpdateCheck = false;  // fires once on frame 1
 
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
@@ -53,7 +54,8 @@ void ScriptingEngine::BindAudio(AudioManager *audio) {
 }
 
 void ScriptingEngine::ResetOnUpdate() {
-  m_impl->onUpdateFn = sol::function{};
+  m_impl->onUpdateFn         = sol::function{};
+  m_impl->loggedOnUpdateCheck = false;  // re-arm for the next scene
 }
 
 std::function<void()> ScriptingEngine::TakePendingScene() {
@@ -61,6 +63,15 @@ std::function<void()> ScriptingEngine::TakePendingScene() {
 }
 
 void ScriptingEngine::CallOnUpdate(float dt) {
+  // One-shot sanity check: log whether on_update was registered by the time
+  // the first frame runs.  If this prints 0, RunScript executed after the
+  // first CallOnUpdate tick, or engine.on_update was never called in Lua.
+  if (!m_impl->loggedOnUpdateCheck) {
+    m_impl->loggedOnUpdateCheck = true;
+    std::cout << "[ScriptingEngine] frame-1 on_update.valid() = "
+              << m_impl->onUpdateFn.valid() << '\n';
+  }
+
   if (m_impl->onUpdateFn.valid()) {
     auto result = m_impl->onUpdateFn(dt);
     if (!result.valid()) {
