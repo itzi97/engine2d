@@ -1,17 +1,24 @@
 -- scripts/scenes/ski.lua
 -- Kenney Tiny Ski — full game scene.
 -- Loaded by SceneManager when scene.load("ski") is called.
--- Tiles, player entity, gravity, steering, lerp camera, tile AABB.
 
-local TILE     = 16
+-- ── Display config (owned here, not in the engine) ───────────────────────────
+-- Map is 31x18 tiles at 16px each = 496x288. The window and logical
+-- renderer resolution are set here so the engine stays resolution-agnostic.
+local TILE   = 16
+local MAP_W  = 31
+local MAP_H  = 18
+local VIEW_W = MAP_W * TILE   -- 496
+local VIEW_H = MAP_H * TILE   -- 288
+
+engine.set_window_size(VIEW_W, VIEW_H)
+engine.set_window_title("Tiny Ski")
+
+-- ── Game constants ────────────────────────────────────────────────────────────
 local GRAVITY  = 200    -- px/s² downward
 local STEER    = 90     -- lateral acceleration px/s²
 local MAX_SPD  = 280    -- px/s max resultant speed
 local CAM_LERP = 0.08   -- camera smoothing (0 = frozen, 1 = snap)
-
--- Must match Game::kWidth / kHeight
-local VIEW_W = 1280
-local VIEW_H = 720
 
 -- ── Boot ─────────────────────────────────────────────────────────────────────
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
@@ -26,7 +33,7 @@ for _, obj in pairs(objects) do
   end
 end
 
--- Load the Kenney Tiny Ski atlas (1 px spacing, no margin, 16×16 tiles).
+-- Load the Kenney Tiny Ski atlas (1 px spacing, no margin, 16x16 tiles).
 local atlas = engine.load_texture("assets/ski/tilemap_packed.png")
 
 -- ── Player entity ─────────────────────────────────────────────────────────────
@@ -47,7 +54,6 @@ engine.set_camera(
 
 -- ── Update loop ───────────────────────────────────────────────────────────────
 engine.on_update = function(dt)
-  -- ESC quits.
   if engine.is_key_just_pressed("ESCAPE") then
     engine.quit()
   end
@@ -87,7 +93,6 @@ engine.on_update = function(dt)
   )
 
   -- ── Tile AABB collision ───────────────────────────────────────────────────
-  -- Re-read position after PhysicsSystem has integrated velocity.
   px, py = world.get_position(player)
   local pw, ph = TILE, TILE
 

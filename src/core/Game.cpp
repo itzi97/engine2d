@@ -44,13 +44,6 @@ bool Game::Initialize() {
     return false;
   }
 
-  // Lock the logical resolution to the map size so that if the user
-  // resizes the window SDL scales+letterboxes rather than breaking
-  // tile coordinates.
-  SDL_SetRenderLogicalPresentation(
-      m_renderer, kWidth, kHeight,
-      SDL_LOGICAL_PRESENTATION_LETTERBOX);
-
   m_world     = std::make_unique<World>();
   m_input     = std::make_unique<InputManager>();
   m_fonts     = std::make_unique<FontManager>();
@@ -63,7 +56,7 @@ bool Game::Initialize() {
   RegisterScenes();
 
   m_scripting->BindWorld(m_world.get(), m_textures.get());
-  m_scripting->BindInput(m_input.get(), m_window, m_scenes.get());
+  m_scripting->BindInput(m_input.get(), m_window, m_renderer, m_scenes.get());
   m_scripting->BindFonts(m_fonts.get());
   m_scripting->BindTextures(m_textures.get());
   m_scripting->BindAudio(m_audio.get());

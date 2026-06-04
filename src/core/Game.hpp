@@ -27,11 +27,11 @@ private:
   void Render();
   void RegisterScenes();
 
+  // Generic fallback size — each game script calls engine.set_window_size()
+  // at boot to set its own resolution. Nothing game-specific lives here.
   static constexpr std::string_view kTitle  = "engine2d";
-  // 31 tiles * 16 px  = 496
-  // 18 tiles * 16 px  = 288
-  static constexpr int              kWidth  = 496;
-  static constexpr int              kHeight = 288;
+  static constexpr int              kWidth  = 800;
+  static constexpr int              kHeight = 600;
 
   SDL_Window   *m_window{nullptr};
   SDL_Renderer *m_renderer{nullptr};

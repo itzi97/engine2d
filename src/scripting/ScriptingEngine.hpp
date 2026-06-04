@@ -1,39 +1,40 @@
 #pragma once
-#include <filesystem>
+#include <sol/sol.hpp>
 #include <functional>
-#include <memory>
-#include <string_view>
+#include <optional>
+#include <string>
 
-class World;
-class InputManager;
+class AudioManager;
 class FontManager;
+class InputManager;
 class SceneManager;
 class TextureManager;
-class AudioManager;
+class World;
 struct SDL_Window;
+struct SDL_Renderer;
 
 class ScriptingEngine {
 public:
   ScriptingEngine();
-  ~ScriptingEngine();
 
-  void BindWorld(World *world, TextureManager *textures);
-  void BindInput(InputManager *input, SDL_Window *window,
-                 SceneManager *scenes = nullptr);
-  void BindFonts(FontManager *fonts);
+  // Bind subsystems — call once during Game::Initialize before RunString.
+  void BindWorld   (World *world, TextureManager *textures);
+  void BindInput   (InputManager *input, SDL_Window *window,
+                    SDL_Renderer *renderer, SceneManager *scenes);
+  void BindFonts   (FontManager *fonts);
   void BindTextures(TextureManager *textures);
-  void BindAudio(AudioManager *audio);
+  void BindAudio   (AudioManager *audio);
 
-  bool RunScript(const std::filesystem::path &path);
-  bool RunString(std::string_view src, std::string_view chunkName = "<string>");
+  bool RunString(const char *src, const char *chunkName);
+  bool RunFile  (const std::string &path);
 
   void CallOnUpdate(float dt);
   void ResetOnUpdate();
 
-  void QueueScene(std::function<void()> fn);
-  std::function<void()> TakePendingScene();
+  std::optional<std::function<void()>> TakePendingScene();
 
 private:
-  struct Impl;
-  std::unique_ptr<Impl> m_impl;
+  sol::state             m_lua;
+  sol::function          m_onUpdate;
+  std::function<void()>  m_pendingScene;
 };

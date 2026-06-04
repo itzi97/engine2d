@@ -1,120 +1,92 @@
 #define SOL_ALL_SAFETIES_ON 1
-#include <sol/sol.hpp>
-
 #include "scripting/ScriptingEngine.hpp"
 
 #include "scripting/bindings/BindAudio.hpp"
 #include "scripting/bindings/BindEngine.hpp"
-#include "scripting/bindings/BindMapValidation.hpp"
+#include "scripting/bindings/BindFonts.hpp"
 #include "scripting/bindings/BindTextures.hpp"
 #include "scripting/bindings/BindWorld.hpp"
 
-#include "audio/AudioManager.hpp"
-#include "input/InputManager.hpp"
-#include "map/TiledMap.hpp"
-#include "rendering/FontManager.hpp"
-#include "rendering/TextureManager.hpp"
-#include "ecs/World.hpp"
-#include "core/SceneManager.hpp"
-
 #include <SDL3/SDL.h>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
-#include <optional>
+#include <sstream>
 
-struct ScriptingEngine::Impl {
-  sol::state            lua;
-  sol::function         onUpdateFn;
-  std::function<void()> pendingScene;
-  bool                  loggedOnUpdateCheck = false;
-  std::optional<TiledMap> lastMap;
-  World                *world = nullptr;
-
-  Impl() {
-    lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
-                       sol::lib::table, sol::lib::io, sol::lib::os);
-    lua.set_function("log", [](const std::string &msg) {
-      std::cout << "[Lua] " << msg << '\n';
-    });
-  }
-};
-
-ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
-ScriptingEngine::~ScriptingEngine() = default;
+ScriptingEngine::ScriptingEngine() {
+  m_lua.open_libraries(
+      sol::lib::base, sol::lib::math,
+      sol::lib::table, sol::lib::string,
+      sol::lib::io,    sol::lib::package);
+}
 
 void ScriptingEngine::BindWorld(World *world, TextureManager *textures) {
-  m_impl->world = world;
-  ::BindWorld(m_impl->lua, world, textures, m_impl->lastMap);
-  ::BindMapValidation(m_impl->lua, &m_impl->lastMap);
+  BindWorldLua(m_lua, world, textures);
 }
+
 void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window,
-                                SceneManager *scenes) {
-  ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn,
-               m_impl->pendingScene, scenes, m_impl->world);
+                                SDL_Renderer *renderer, SceneManager *scenes) {
+  BindEngine(m_lua, input, window, renderer,
+             m_onUpdate, m_pendingScene, scenes,
+             nullptr /* world set later via BindWorld */);
 }
-void ScriptingEngine::BindFonts(FontManager *) {}
+
+void ScriptingEngine::BindFonts(FontManager *fonts) {
+  BindFontsLua(m_lua, fonts);
+}
+
 void ScriptingEngine::BindTextures(TextureManager *textures) {
-  ::BindTextures(m_impl->lua, textures);
+  BindTexturesLua(m_lua, textures);
 }
+
 void ScriptingEngine::BindAudio(AudioManager *audio) {
-  ::BindAudio(m_impl->lua, audio);
+  BindAudioLua(m_lua, audio);
 }
 
-void ScriptingEngine::ResetOnUpdate() {
-  m_impl->onUpdateFn          = sol::function{};
-  m_impl->loggedOnUpdateCheck = false;
+bool ScriptingEngine::RunString(const char *src, const char *chunkName) {
+  auto result = m_lua.safe_script(src, chunkName);
+  if (!result.valid()) {
+    sol::error err = result;
+    std::cerr << "[ScriptingEngine] RunString error (" << chunkName
+              << "): " << err.what() << '\n';
+    return false;
+  }
+  return true;
 }
 
-void ScriptingEngine::QueueScene(std::function<void()> fn) {
-  m_impl->pendingScene = std::move(fn);
-}
-
-std::function<void()> ScriptingEngine::TakePendingScene() {
-  return std::exchange(m_impl->pendingScene, nullptr);
+bool ScriptingEngine::RunFile(const std::string &path) {
+  std::ifstream f(path);
+  if (!f) {
+    std::cerr << "[ScriptingEngine] Cannot open: " << path << '\n';
+    return false;
+  }
+  std::ostringstream ss;
+  ss << f.rdbuf();
+  return RunString(ss.str().c_str(), path.c_str());
 }
 
 void ScriptingEngine::CallOnUpdate(float dt) {
-  if (!m_impl->loggedOnUpdateCheck) {
-    m_impl->loggedOnUpdateCheck = true;
-    std::cout << "[ScriptingEngine] frame-1 on_update.valid() = "
-              << m_impl->onUpdateFn.valid() << '\n';
+  if (!m_onUpdate.valid()) {
+    static int warnCount = 0;
+    if (warnCount++ < 3)
+      std::cerr << "[ScriptingEngine] frame-" << warnCount
+                << " on_update.valid() = 0\n";
+    return;
   }
-  if (m_impl->onUpdateFn.valid()) {
-    auto result = m_impl->onUpdateFn(dt);
-    if (!result.valid()) {
-      sol::error err = result;
-      std::cerr << "[ScriptingEngine] on_update error: " << err.what() << '\n';
-    }
+  auto result = m_onUpdate(dt);
+  if (!result.valid()) {
+    sol::error err = result;
+    std::cerr << "[ScriptingEngine] on_update error: " << err.what() << '\n';
   }
 }
 
-bool ScriptingEngine::RunScript(const std::filesystem::path &path) {
-  auto result = m_impl->lua.safe_script_file(path.string(), sol::script_pass_on_error);
-  if (!result.valid()) {
-    sol::error err = result;
-    std::cerr << "[ScriptingEngine] Error in '" << path << "': " << err.what() << '\n';
-    return false;
-  }
-  return true;
+void ScriptingEngine::ResetOnUpdate() {
+  m_onUpdate = sol::function{};
 }
 
-bool ScriptingEngine::RunString(std::string_view src, std::string_view chunkName) {
-  lua_State *L = m_impl->lua.lua_state();
-  const std::string name = "@" + std::string(chunkName);
-  const int loadErr = luaL_loadbuffer(L, src.data(), src.size(), name.c_str());
-  if (loadErr != LUA_OK) {
-    std::cerr << "[ScriptingEngine] Compile error in '" << chunkName
-              << "': " << lua_tostring(L, -1) << '\n';
-    lua_pop(L, 1);
-    return false;
-  }
-  sol::protected_function chunk(L, -1);
-  lua_pop(L, 1);
-  auto result = chunk();
-  if (!result.valid()) {
-    sol::error err = result;
-    std::cerr << "[ScriptingEngine] Runtime error in '" << chunkName
-              << "': " << err.what() << '\n';
-    return false;
-  }
-  return true;
+std::optional<std::function<void()>> ScriptingEngine::TakePendingScene() {
+  if (!m_pendingScene) return std::nullopt;
+  auto fn = std::move(m_pendingScene);
+  m_pendingScene = nullptr;
+  return fn;
 }

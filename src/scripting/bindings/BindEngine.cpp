@@ -13,6 +13,7 @@
 void BindEngine(sol::state            &lua,
                 InputManager          *input,
                 SDL_Window            *window,
+                SDL_Renderer          *renderer,
                 sol::function         &onUpdateOut,
                 std::function<void()> &pendingSceneOut,
                 SceneManager          *scenes,
@@ -42,8 +43,17 @@ void BindEngine(sol::state            &lua,
       [input]() -> std::tuple<float, float> { return {input->MouseX(), input->MouseY()}; });
 
   // --- Window -------------------------------------------------------------
-  eng.set_function("set_window_size", [window](int w, int h) {
+  // set_window_size(w, h)
+  //   Resizes the OS window AND updates the renderer's logical presentation
+  //   so that all draw calls remain in the same [0,w]x[0,h] coordinate space
+  //   even if the user later resizes the window manually.
+  //   Call this once at scene boot — it is the script's job to own the
+  //   game's resolution, not the engine's.
+  eng.set_function("set_window_size", [window, renderer](int w, int h) {
     SDL_SetWindowSize(window, w, h);
+    SDL_SetRenderLogicalPresentation(
+        renderer, w, h,
+        SDL_LOGICAL_PRESENTATION_LETTERBOX);
   });
   eng.set_function("set_window_title", [window](const std::string &title) {
     SDL_SetWindowTitle(window, title.c_str());
