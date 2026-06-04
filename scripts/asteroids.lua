@@ -13,6 +13,9 @@ local SHEET        = "assets/sprites/simpleSpace_sheet.png"
 local MAP_WAVE     = {
   "assets/maps/asteroids_wave1.tmj",
   "assets/maps/asteroids_wave2.tmj",
+  "assets/maps/asteroids_wave3.tmj",
+  "assets/maps/asteroids_wave4.tmj",
+  "assets/maps/asteroids_wave5.tmj",
 }
 
 local ROT_SPEED     = 180   -- degrees / sec
@@ -51,6 +54,7 @@ local score      = 0
 local lives      = MAX_LIVES
 local paused     = false
 local game_over  = false
+local you_win    = false
 local wave_clear = false
 local wc_timer   = 0
 
@@ -151,7 +155,7 @@ local function update_hud()
     for i = 1, lives do s = s .. "|" end
     world.set_text(hud_lives, s)
   end
-  if hud_wave then world.set_text(hud_wave, "WAVE " .. wave) end
+  if hud_wave then world.set_text(hud_wave, "WAVE " .. wave .. " / " .. #MAP_WAVE) end
 end
 
 -- ---------------------------------------------------------------------------
@@ -164,7 +168,7 @@ local function load_wave(w_idx)
   wave_clear = false
   wc_timer   = 0
 
-  local map_path = MAP_WAVE[w_idx] or MAP_WAVE[#MAP_WAVE]
+  local map_path = MAP_WAVE[w_idx]
   local objects  = world.load_tiled_map(map_path)
 
   local spawn_x, spawn_y = W/2, H/2
@@ -193,7 +197,7 @@ end
 local function build_hud()
   hud_score   = make_label(10,        8, "SCORE  0",   18, 255, 255, 255)
   hud_lives   = make_label(10,       34, "LIVES ||||", 18, 255, 220,  80)
-  hud_wave    = make_label(W - 110,   8, "WAVE 1",     18, 180, 220, 255)
+  hud_wave    = make_label(W - 140,   8, "WAVE 1 / " .. #MAP_WAVE, 18, 180, 220, 255)
   hud_overlay = make_label(W/2 - 200, H/2 - 20, "",   32, 255,  80,  80)
   world.set_layer(hud_score,   50)
   world.set_layer(hud_lives,   50)
@@ -224,6 +228,7 @@ local function init()
   lives     = MAX_LIVES
   paused    = false
   game_over = false
+  you_win   = false
 
   build_hud()
   pause_ui = make_pause_overlay(W/2, H/2 - 80)
@@ -240,7 +245,7 @@ init()
 engine.on_update(function(dt)
 
   -- ---- pause menu -----------------------------------------------------------
-  if engine.is_key_just_pressed("P") and not game_over then
+  if engine.is_key_just_pressed("P") and not game_over and not you_win then
     toggle_pause()
   end
 
@@ -270,12 +275,34 @@ engine.on_update(function(dt)
     return
   end
 
+  -- ---- you win --------------------------------------------------------------
+  if you_win then
+    if engine.is_key_just_pressed("RETURN") then
+      engine.load_scene(function() dofile("scripts/asteroids.lua") end)
+    end
+    if engine.is_key_just_pressed("ESCAPE") then
+      engine.load_scene(function() dofile("scripts/main_menu.lua") end)
+    end
+    return
+  end
+
   -- ---- wave clear -----------------------------------------------------------
   if wave_clear then
     wc_timer = wc_timer - dt
     if wc_timer <= 0 then
       wave = wave + 1
-      engine.load_scene(function() dofile("scripts/asteroids.lua") end)
+      if wave > #MAP_WAVE then
+        -- All waves completed — show win screen without reloading the scene
+        you_win = true
+        world.set_text(hud_overlay, "YOU WIN!   ENTER play again   ESC menu")
+        world.set_text_color(hud_overlay, 80, 255, 180, 255)
+      else
+        engine.load_scene(function()
+          -- Carry score and lives into the new scene via globals
+          local s, l, w_idx = score, lives, wave
+          dofile("scripts/asteroids.lua")
+        end)
+      end
     end
     return
   end
@@ -447,11 +474,16 @@ engine.on_update(function(dt)
   end
 
   -- ---- wave clear check -----------------------------------------------------
-  if #asteroids == 0 and not game_over and not wave_clear then
+  if #asteroids == 0 and not game_over and not wave_clear and not you_win then
     wave_clear = true
     wc_timer   = 2.5
-    world.set_text(hud_overlay, "WAVE CLEAR!")
-    world.set_text_color(hud_overlay, 80, 255, 140, 255)
+    if wave < #MAP_WAVE then
+      world.set_text(hud_overlay, "WAVE CLEAR!")
+      world.set_text_color(hud_overlay, 80, 255, 140, 255)
+    else
+      world.set_text(hud_overlay, "FINAL WAVE CLEAR!")
+      world.set_text_color(hud_overlay, 255, 220, 60, 255)
+    end
   end
 
   if engine.is_key_just_pressed("ESCAPE") then

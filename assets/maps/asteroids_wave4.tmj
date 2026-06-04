@@ -1,0 +1,173 @@
+{
+  "compressionlevel": -1,
+  "height": 18,
+  "infinite": false,
+  "layers": [
+    {
+      "draworder": "topdown",
+      "id": 1,
+      "name": "objects",
+      "objects": [
+        {
+          "class": "player_spawn",
+          "height": 48,
+          "id": 1,
+          "name": "player_spawn",
+          "rotation": 0,
+          "visible": true,
+          "width": 48,
+          "x": 376,
+          "y": 376
+        },
+        {
+          "class": "asteroid",
+          "height": 48,
+          "id": 2,
+          "name": "rock_01",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "1.8" },
+            { "name": "size",  "type": "string", "value": "large" }
+          ],
+          "rotation": 0, "visible": true, "width": 48, "x": 60,  "y": 60
+        },
+        {
+          "class": "asteroid",
+          "height": 48,
+          "id": 3,
+          "name": "rock_02",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.0" },
+            { "name": "size",  "type": "string", "value": "large" }
+          ],
+          "rotation": 0, "visible": true, "width": 48, "x": 700, "y": 60
+        },
+        {
+          "class": "asteroid",
+          "height": 48,
+          "id": 4,
+          "name": "rock_03",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "1.9" },
+            { "name": "size",  "type": "string", "value": "large" }
+          ],
+          "rotation": 0, "visible": true, "width": 48, "x": 60,  "y": 620
+        },
+        {
+          "class": "asteroid",
+          "height": 48,
+          "id": 5,
+          "name": "rock_04",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.2" },
+            { "name": "size",  "type": "string", "value": "large" }
+          ],
+          "rotation": 0, "visible": true, "width": 48, "x": 680, "y": 600
+        },
+        {
+          "class": "asteroid",
+          "height": 32,
+          "id": 6,
+          "name": "rock_05",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.5" },
+            { "name": "size",  "type": "string", "value": "medium" }
+          ],
+          "rotation": 0, "visible": true, "width": 32, "x": 160, "y": 160
+        },
+        {
+          "class": "asteroid",
+          "height": 32,
+          "id": 7,
+          "name": "rock_06",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.7" },
+            { "name": "size",  "type": "string", "value": "medium" }
+          ],
+          "rotation": 0, "visible": true, "width": 32, "x": 580, "y": 150
+        },
+        {
+          "class": "asteroid",
+          "height": 32,
+          "id": 8,
+          "name": "rock_07",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.4" },
+            { "name": "size",  "type": "string", "value": "medium" }
+          ],
+          "rotation": 0, "visible": true, "width": 32, "x": 160, "y": 520
+        },
+        {
+          "class": "asteroid",
+          "height": 32,
+          "id": 9,
+          "name": "rock_08",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.6" },
+            { "name": "size",  "type": "string", "value": "medium" }
+          ],
+          "rotation": 0, "visible": true, "width": 32, "x": 580, "y": 520
+        },
+        {
+          "class": "asteroid",
+          "height": 20,
+          "id": 10,
+          "name": "rock_09",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "3.0" },
+            { "name": "size",  "type": "string", "value": "small" }
+          ],
+          "rotation": 0, "visible": true, "width": 20, "x": 380, "y": 80
+        },
+        {
+          "class": "asteroid",
+          "height": 20,
+          "id": 11,
+          "name": "rock_10",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.8" },
+            { "name": "size",  "type": "string", "value": "small" }
+          ],
+          "rotation": 0, "visible": true, "width": 20, "x": 100, "y": 380
+        },
+        {
+          "class": "asteroid",
+          "height": 20,
+          "id": 12,
+          "name": "rock_11",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "3.0" },
+            { "name": "size",  "type": "string", "value": "small" }
+          ],
+          "rotation": 0, "visible": true, "width": 20, "x": 660, "y": 380
+        },
+        {
+          "class": "asteroid",
+          "height": 20,
+          "id": 13,
+          "name": "rock_12",
+          "properties": [
+            { "name": "speed", "type": "string", "value": "2.9" },
+            { "name": "size",  "type": "string", "value": "small" }
+          ],
+          "rotation": 0, "visible": true, "width": 20, "x": 380, "y": 640
+        }
+      ],
+      "opacity": 1,
+      "type": "objectgroup",
+      "visible": true,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "nextlayerid": 2,
+  "nextobjectid": 14,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "tiledversion": "1.10.0",
+  "tileheight": 40,
+  "tilesets": [],
+  "tilewidth": 40,
+  "type": "map",
+  "version": "1.10",
+  "width": 20
+}
