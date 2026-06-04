@@ -1,4 +1,0 @@
--- pause_menu.lua is no longer used.
--- Pause is now a local `paused` boolean flag inside each game's on_update.
--- This file is kept as a placeholder to avoid breaking any cached references.
--- It can be safely deleted.
