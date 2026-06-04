@@ -9,15 +9,16 @@ include(FetchContent)
 include(cmake/EmbedScript.cmake)
 
 # ---------------------------------------------------------------------------
-# Game selection
+# Bootstrap script selection
+# The engine embeds exactly ONE Lua file: the game bootstrap (scripts/main.lua).
+# It calls engine.set_font_path(), scene.register(), and scene.load().
 # ---------------------------------------------------------------------------
-set(GAME "main_menu" CACHE STRING "Game script to embed (filename without .lua)")
-set_property(CACHE GAME PROPERTY STRINGS main_menu snake breakout sprite_test audio_test ski)
+set(GAME "main" CACHE STRING "Bootstrap script to embed (filename without .lua, relative to scripts/)")
 
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/scripts/${GAME}.lua")
-  message(FATAL_ERROR "Game script not found: scripts/${GAME}.lua")
+  message(FATAL_ERROR "Bootstrap script not found: scripts/${GAME}.lua")
 endif()
-message(STATUS "Building game: ${GAME}")
+message(STATUS "Embedding bootstrap: scripts/${GAME}.lua")
 
 # -- SDL3 ---------------------------------------------------------------------
 FetchContent_Declare(
@@ -151,7 +152,7 @@ if(NOT EXISTS "${FONT_FILE}")
   message(STATUS "DejaVuSans.ttf installed to ${FONT_FILE}")
 endif()
 
-# -- Embed selected game script -----------------------------------------------
+# -- Embed bootstrap script ---------------------------------------------------
 embed_script(${GAME} scripts/${GAME}.lua)
 
 set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
@@ -203,7 +204,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    FONT_PATH="${FONT_DIR}/DejaVuSans.ttf"
     $<$<CONFIG:Debug>:HOTRELOAD_ENABLED>
 )
 

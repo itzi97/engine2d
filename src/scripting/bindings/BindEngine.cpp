@@ -43,12 +43,6 @@ void BindEngine(sol::state            &lua,
       [input]() -> std::tuple<float, float> { return {input->MouseX(), input->MouseY()}; });
 
   // --- Window -------------------------------------------------------------
-  // set_window_size(w, h)
-  //   Resizes the OS window AND updates the renderer's logical presentation
-  //   so that all draw calls remain in the same [0,w]x[0,h] coordinate space
-  //   even if the user later resizes the window manually.
-  //   Call this once at scene boot — it is the script's job to own the
-  //   game's resolution, not the engine's.
   eng.set_function("set_window_size", [window, renderer](int w, int h) {
     SDL_SetWindowSize(window, w, h);
     SDL_SetRenderLogicalPresentation(
@@ -58,6 +52,16 @@ void BindEngine(sol::state            &lua,
   eng.set_function("set_window_title", [window](const std::string &title) {
     SDL_SetWindowTitle(window, title.c_str());
   });
+
+  // --- Font ---------------------------------------------------------------
+  // engine.set_font_path(path)
+  //   Tells the engine which TTF file TextSystem should use for all
+  //   world.add_text() calls. Call this once from scripts/main.lua.
+  //   The path is relative to the project root (same as assets/).
+  eng.set_function("set_font_path",
+      [world](const std::string &path) {
+        if (world) world->SetFontPath(path);
+      });
 
   // --- Camera -------------------------------------------------------------
   eng.set_function("set_camera", [world](float x, float y) {
@@ -74,6 +78,11 @@ void BindEngine(sol::state            &lua,
   // --- Scene management ---------------------------------------------------
   auto sceneTable = lua.create_named_table("scene");
   if (scenes) {
+    // scene.register(name, path) — add a named scene from Lua
+    sceneTable.set_function("register",
+        [scenes](const std::string &name, const std::string &path) {
+          scenes->Register(name, path);
+        });
     sceneTable.set_function("load", [scenes](const std::string &name) {
       scenes->Load(name);
     });
