@@ -1,42 +1,50 @@
 -- scripts/scenes/ski.lua
-local TILE  = 32
-local MAP_W = 16
-local MAP_H = 800
+local SCALE  = 2       -- all world coords and sizes are in scaled pixels
+local SRC    = 16      -- source tile size in the atlas (never changes)
+local TILE   = SRC * SCALE   -- 32 — world-space tile size
+local MAP_W  = 16
+local MAP_H  = 800
 local VIEW_W = MAP_W * TILE
-local VIEW_H = 18  * TILE
+local VIEW_H = 18 * TILE
 
 engine.set_window_size(VIEW_W, VIEW_H)
 engine.set_window_title("Tiny Ski")
 
 -- ── Speed gears ────────────────────────────────────────────────────────────
 local GEARS      = { "slow", "normal", "fast" }
-local GEAR_SPEED = { slow = 60, normal = 120, fast = 200 }
-local GEAR_STEER = { slow = 55, normal = 100, fast = 150 }
+local GEAR_SPEED = { slow = 60,  normal = 120, fast = 200 }
+local GEAR_STEER = { slow = 55,  normal = 100, fast = 150 }
 local gear_idx   = 2
 
 local PIN_X = VIEW_W * 0.5 - TILE * 0.5
 local PIN_Y = VIEW_H * 0.3
 
--- Atlas frames (sprite sheet coords stay in 16px units — source art is 16px)
-local SRC = 16   -- source tile size in the atlas
+-- Atlas frames (in source/atlas pixel coords, always SRC-based)
 local FRAME_IDLE  = { x = 10*SRC, y = 5*SRC, w = SRC, h = SRC }
 local FRAME_STEER = { x = 11*SRC, y = 5*SRC, w = SRC, h = SRC }
 local TILT = 15
 
--- Trail sprites (row 4, 0-indexed)
+-- Trail sprites
 local TRAIL_SOLID   = { x = 10*SRC, y = 4*SRC, w = SRC, h = SRC }
 local TRAIL_FADE    = { x = 11*SRC, y = 4*SRC, w = SRC, h = SRC }
 local TRAIL_SPACING = TILE
 local TRAIL_TTL     = 2.0
 
+-- Load map — C++ spawns tiles at native 16px size, world coords in 16px units.
+-- We then scale everything in Lua by SCALE.
 local objects = world.load_tiled_map("assets/maps/longMap.tmj")
+
+-- Rescale all tile entities spawned by the map loader
+world.scale_tile_entities(SCALE)
 
 local spawn_x = (MAP_W / 2) * TILE
 local spawn_y = 2 * TILE
 for _, obj in pairs(objects) do
   if type(obj) == "table" then
     if obj.type == "spawn" or obj.name == "spawn" then
-      spawn_x, spawn_y = obj.x, obj.y
+      -- Object coords from TMJ are in 16px units, scale up
+      spawn_x = obj.x * SCALE
+      spawn_y = obj.y * SCALE
       break
     end
   end
@@ -70,7 +78,6 @@ local function set_rotation(deg)
   end
 end
 
--- Trail state
 local trail         = {}
 local trail_y_accum = 0
 
@@ -105,20 +112,13 @@ end
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
-  -- ── Gear shifting ────────────────────────────────────────────────────────
   local pushing = engine.is_key_pressed("down")
-
-  if engine.is_key_just_pressed("up") then
-    gear_idx = math.max(1, gear_idx - 1)
-  end
-  if engine.is_key_just_pressed("down") then
-    gear_idx = math.min(#GEARS, gear_idx + 1)
-  end
+  if engine.is_key_just_pressed("up")   then gear_idx = math.max(1,       gear_idx - 1) end
+  if engine.is_key_just_pressed("down") then gear_idx = math.min(#GEARS,  gear_idx + 1) end
 
   local gear_name = GEARS[gear_idx]
   local vy = GEAR_SPEED[gear_name]
 
-  -- ── Horizontal steering ─────────────────────────────────────────────────
   local left  = engine.is_key_pressed("left")
   local right = engine.is_key_pressed("right")
   local steer = GEAR_STEER[gear_name]
@@ -128,24 +128,17 @@ engine.on_update(function(dt)
 
   world.set_velocity(player, vx, vy)
 
-  -- ── Sprite + tilt ────────────────────────────────────────────────────────
-  if pushing or left or right then
-    set_frame(FRAME_STEER)
-  else
-    set_frame(FRAME_IDLE)
-  end
+  if pushing or left or right then set_frame(FRAME_STEER)
+  else                             set_frame(FRAME_IDLE) end
 
   if left then
-    world.set_sprite_flip(player, true, false)
-    set_rotation(TILT)
+    world.set_sprite_flip(player, true,  false); set_rotation( TILT)
   elseif right then
-    world.set_sprite_flip(player, false, false)
-    set_rotation(-TILT)
+    world.set_sprite_flip(player, false, false); set_rotation(-TILT)
   else
     set_rotation(0)
   end
 
-  -- ── Camera + trail spawn ─────────────────────────────────────────────────
   local px, py = world.get_position(player)
   engine.set_camera(px - PIN_X, py - PIN_Y)
 
@@ -160,7 +153,7 @@ engine.on_update(function(dt)
   engine.set_window_title(string.format(
     "Tiny Ski  |  [%s]  world=(%.0f,%.0f)", gear_name, px, py))
 
-  -- ── Tile collision ────────────────────────────────────────────────────────
+  -- Collision (all coords in TILE=32 world space)
   local pw, ph = TILE, TILE
   local function solid(wx, wy)
     return world.is_tile_solid(math.floor(wx / TILE), math.floor(wy / TILE))
