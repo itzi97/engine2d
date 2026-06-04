@@ -12,8 +12,12 @@ engine.set_window_size(VIEW_W, VIEW_H)
 engine.set_window_title("Tiny Ski")
 
 -- ── Game constants ────────────────────────────────────────────────────────
-local SPEED   = 120   -- pixels/sec in any direction
-local MAX_SPD = 280
+local SPEED = 120
+
+-- Skier is pinned 30% from the top of the screen so there's
+-- more visible slope ahead than behind.
+local PIN_X = VIEW_W * 0.5 - TILE * 0.5   -- horizontal centre
+local PIN_Y = VIEW_H * 0.3                 -- 30% from top
 
 -- Sprite frames (stride = 16, no gap)
 local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
@@ -43,11 +47,8 @@ world.set_sprite_texture(player, atlas, FRAME_IDLE.x, FRAME_IDLE.y, FRAME_IDLE.w
 world.add_kinematic(player)
 world.add_tag(player, "player")
 
--- ── Camera ───────────────────────────────────────────────────────────────────
-engine.set_camera(
-  spawn_x - VIEW_W * 0.5 + TILE * 0.5,
-  spawn_y - VIEW_H * 0.3
-)
+-- Camera starts so skier is at PIN position on screen
+engine.set_camera(spawn_x - PIN_X, spawn_y - PIN_Y)
 
 -- ── Update loop ───────────────────────────────────────────────────────────
 local steering = false
@@ -55,20 +56,18 @@ local steering = false
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
+  -- ── Input ───────────────────────────────────────────────────────────────
   local left  = engine.is_key_pressed("left")
   local right = engine.is_key_pressed("right")
   local up    = engine.is_key_pressed("up")
   local down  = engine.is_key_pressed("down")
 
-  local vx = 0
-  local vy = 0
-
+  local vx, vy = 0, 0
   if left  then vx = -SPEED end
   if right then vx =  SPEED end
   if up    then vy = -SPEED end
   if down  then vy =  SPEED end
 
-  -- Normalise diagonal so speed stays consistent
   if vx ~= 0 and vy ~= 0 then
     local inv = SPEED / math.sqrt(vx*vx + vy*vy)
     vx, vy = vx * inv, vy * inv
@@ -76,28 +75,23 @@ engine.on_update(function(dt)
 
   world.set_velocity(player, vx, vy)
 
-  -- ── Sprite: sticks-behind while steering left/right, idle otherwise ──────
+  -- ── Sprite pose ───────────────────────────────────────────────────────────
   local is_steering = left or right
   if is_steering ~= steering then
     steering = is_steering
     local f = is_steering and FRAME_STEER or FRAME_IDLE
     world.set_sprite_src(player, f.x, f.y, f.w, f.h)
   end
-
-  -- Flip sprite to face direction of horizontal travel
   if vx < 0 then
     world.set_sprite_flip(player, true, false)
   elseif vx > 0 then
     world.set_sprite_flip(player, false, false)
   end
 
-  -- ── Camera follow ───────────────────────────────────────────────────────
+  -- ── Camera: pin skier to fixed screen position every frame ──────────────
+  -- The world moves; the skier appears stationary on screen.
   local px, py = world.get_position(player)
-  local cx, cy = engine.get_camera()
-  engine.set_camera(
-    cx + (px - VIEW_W * 0.5 + TILE * 0.5 - cx) * 0.12,
-    cy + (py - VIEW_H * 0.3              - cy) * 0.12
-  )
+  engine.set_camera(px - PIN_X, py - PIN_Y)
 
   -- ── AABB tile collision ─────────────────────────────────────────────────
   px, py = world.get_position(player)
