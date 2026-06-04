@@ -11,6 +11,8 @@
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
+#include <chrono>
+#include <thread>
 
 #include "game_script_shim.hpp"
 
@@ -38,11 +40,21 @@ bool Game::Initialize() {
 
   SDL_RaiseWindow(m_window);
 
+  // Request adaptive vsync (SDL3: 1=vsync, -1=adaptive, 0=immediate)
+  // Adaptive falls back to regular vsync if the driver doesn't support it.
+  SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+
   m_renderer = SDL_CreateRenderer(m_window, nullptr);
   if (!m_renderer) {
     SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
     return false;
   }
+
+  // Try to lock to display refresh rate via SDL3's vsync API.
+  // -1 = adaptive vsync (tears on missed frame instead of stalling),
+  //  1 = regular vsync. Ignore failure — fallback sleep handles it.
+  if (!SDL_SetRenderVSync(m_renderer, -1))
+    SDL_SetRenderVSync(m_renderer, 1);
 
   m_world     = std::make_unique<World>();
   m_input     = std::make_unique<InputManager>();
@@ -57,7 +69,7 @@ bool Game::Initialize() {
 
   m_scripting->BindWorld(m_world.get(), m_textures.get());
   m_scripting->BindInput(m_input.get(), m_window, m_renderer,
-                         m_scenes.get(), m_world.get());  // ← pass world
+                         m_scenes.get(), m_world.get());
   m_scripting->BindTextures(m_textures.get());
   m_scripting->BindAudio(m_audio.get());
 
@@ -111,6 +123,13 @@ void Game::Render() {
 
 void Game::Run() {
   using namespace std::chrono;
+  using dur = duration<double>;
+
+  // Fallback frame cap: used only when vsync is unavailable.
+  // Keeps the loop from busy-spinning at thousands of FPS.
+  constexpr double kTargetDt   = 1.0 / 60.0;
+  constexpr float  kMaxDt      = 0.05f;  // clamp spike frames to 50ms
+
   auto previous = steady_clock::now();
   bool running  = true;
 
@@ -118,14 +137,22 @@ void Game::Run() {
     m_input->EndFrame();
     ProcessEvents(running);
 
-    const auto  now = steady_clock::now();
-    const float dt  = std::min(
-        static_cast<float>(duration<double>(now - previous).count()),
-        0.05f);
+    const auto  now     = steady_clock::now();
+    const float dt      = std::min(
+        static_cast<float>(dur(now - previous).count()),
+        kMaxDt);
     previous = now;
 
     Update(dt);
-    Render();
+    Render();  // SDL_RenderPresent blocks here when vsync is active
+
+    // Fallback sleep: if the whole frame took less than the target,
+    // sleep the remainder so we don't spin the CPU to 100%.
+    // When vsync is working this sleep is effectively 0.
+    const auto frameEnd  = steady_clock::now();
+    const double elapsed = dur(frameEnd - now).count();
+    if (elapsed < kTargetDt)
+      std::this_thread::sleep_for(dur(kTargetDt - elapsed));
   }
 }
 
