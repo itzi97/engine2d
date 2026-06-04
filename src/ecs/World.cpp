@@ -16,6 +16,8 @@ void World::Update(float dt) {
 }
 
 void World::RunCollision() {
+  // TODO: spatial hash broadphase — current O(n²) AABB check is fine up to
+  // ~200 entities; beyond that, partition by cell and only test neighbours.
   CollisionSystem::Update(*this);
 }
 

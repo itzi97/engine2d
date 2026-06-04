@@ -56,19 +56,28 @@ struct PackedStorage final : IComponentStorage {
   void ForEachSorted(Fn &&fn) {
     const size_t n = entities.size();
     if (n == 0) return;
-    sortOrder.resize(n);
-    std::iota(sortOrder.begin(), sortOrder.end(), 0);
-    std::stable_sort(sortOrder.begin(), sortOrder.end(), [&](size_t a, size_t b) {
-      return components[a].layer < components[b].layer;
-    });
+
+    if (sortDirty) {
+      sortOrder.resize(n);
+      std::iota(sortOrder.begin(), sortOrder.end(), 0);
+      std::stable_sort(sortOrder.begin(), sortOrder.end(), [&](size_t a, size_t b) {
+        return components[a].layer < components[b].layer;
+      });
+      sortDirty = false;
+    }
+
     for (const size_t i : sortOrder)
       fn(entities[i], components[i]);
   }
+
+  // Call after mutating a component's layer field directly.
+  void MarkSortDirty() { sortDirty = true; }
 
   T &Add(EntityId entity, T &&component) {
     index[entity] = components.size();
     entities.push_back(entity);
     components.push_back(std::move(component));
+    sortDirty = true;
     return components.back();
   }
 
@@ -91,6 +100,7 @@ struct PackedStorage final : IComponentStorage {
     components.pop_back();
     entities.pop_back();
     index.erase(entity);
+    sortDirty = true;
   }
 
   void Clear() override {
@@ -98,12 +108,14 @@ struct PackedStorage final : IComponentStorage {
     entities.clear();
     index.clear();
     sortOrder.clear();
+    sortDirty = true;
   }
 
   std::vector<T>                       components;
   std::vector<EntityId>                entities;
   std::unordered_map<EntityId, size_t> index;
   std::vector<size_t>                  sortOrder;
+  bool                                 sortDirty = true;
 };
 
 // ---------------------------------------------------------------------------
@@ -190,6 +202,14 @@ public:
     const auto it = m_storages.find(std::type_index(typeid(T)));
     if (it == m_storages.end()) return;
     static_cast<PackedStorage<T> *>(it->second.get())->ForEachSorted(std::forward<Fn>(fn));
+  }
+
+  // Mark the sort order stale for component type T after mutating .layer directly.
+  template <ComponentType T>
+  void MarkSortDirty() {
+    const auto it = m_storages.find(std::type_index(typeid(T)));
+    if (it == m_storages.end()) return;
+    static_cast<PackedStorage<T> *>(it->second.get())->MarkSortDirty();
   }
 
   template <ComponentType T>
