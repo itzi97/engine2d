@@ -1,9 +1,9 @@
 -- scripts/scenes/ski.lua
 local TILE  = 16
 local MAP_W = 31
-local MAP_H = 80   -- tall scrolling slope
+local MAP_H = 80
 local VIEW_W = MAP_W * TILE
-local VIEW_H = 18  * TILE   -- viewport stays 18 tiles tall
+local VIEW_H = 18  * TILE
 
 engine.set_window_size(VIEW_W, VIEW_H)
 engine.set_window_title("Tiny Ski")
@@ -12,7 +12,7 @@ engine.set_window_title("Tiny Ski")
 local GEARS      = { "slow", "normal", "fast" }
 local GEAR_SPEED = { slow = 60, normal = 120, fast = 200 }
 local GEAR_STEER = { slow = 55, normal = 100, fast = 150 }
-local gear_idx   = 2   -- start at "normal"
+local gear_idx   = 2
 
 local PIN_X = VIEW_W * 0.5 - TILE * 0.5
 local PIN_Y = VIEW_H * 0.3
@@ -20,8 +20,15 @@ local PIN_Y = VIEW_H * 0.3
 -- Atlas frames
 local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
 local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
-
 local TILT = 15
+
+-- Trail sprites (row 4, 0-indexed)
+-- 10,4 = solid continuous trail
+-- 11,4 = fading trail (bottom solid, top fades) — used as the fresh tip
+local TRAIL_SOLID = { x = 10*TILE, y = 4*TILE, w = TILE, h = TILE }
+local TRAIL_FADE  = { x = 11*TILE, y = 4*TILE, w = TILE, h = TILE }
+local TRAIL_SPACING = 8    -- px of Y travel before a new segment spawns
+local TRAIL_TTL     = 2.0  -- seconds before a segment disappears
 
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
 
@@ -64,6 +71,40 @@ local function set_rotation(deg)
   end
 end
 
+-- Trail state
+local trail          = {}   -- array of { entity, ttl }
+local trail_y_accum  = 0    -- accumulated Y travel since last segment
+
+local function spawn_trail_segment(x, y)
+  -- Promote the previous tip from fade → solid
+  if #trail > 0 then
+    local prev = trail[#trail]
+    world.set_sprite_src(prev.entity,
+      TRAIL_SOLID.x, TRAIL_SOLID.y, TRAIL_SOLID.w, TRAIL_SOLID.h)
+  end
+
+  local e = world.create_entity()
+  world.add_transform(e, x, y, TILE, TILE)
+  world.add_sprite(e, 255, 255, 255, 255, 5)   -- layer 5, behind player
+  world.set_sprite_texture(e, atlas,
+    TRAIL_FADE.x, TRAIL_FADE.y, TRAIL_FADE.w, TRAIL_FADE.h)
+  table.insert(trail, { entity = e, ttl = TRAIL_TTL })
+end
+
+local function update_trail(dt)
+  local i = 1
+  while i <= #trail do
+    local seg = trail[i]
+    seg.ttl = seg.ttl - dt
+    if seg.ttl <= 0 then
+      world.destroy_entity(seg.entity)
+      table.remove(trail, i)
+    else
+      i = i + 1
+    end
+  end
+end
+
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
@@ -99,17 +140,26 @@ engine.on_update(function(dt)
 
   if left then
     world.set_sprite_flip(player, true, false)
-    set_rotation(TILT)         -- flipped sprite, so positive = leans left visually
+    set_rotation(TILT)
   elseif right then
     world.set_sprite_flip(player, false, false)
-    set_rotation(-TILT)        -- negative = leans right visually
+    set_rotation(-TILT)
   else
     set_rotation(0)
   end
 
-  -- ── Camera follow ───────────────────────────────────────────────────────
+  -- ── Camera + trail spawn ─────────────────────────────────────────────────
   local px, py = world.get_position(player)
   engine.set_camera(px - PIN_X, py - PIN_Y)
+
+  -- Accumulate downward travel and spawn a segment when threshold crossed
+  trail_y_accum = trail_y_accum + vy * dt
+  if trail_y_accum >= TRAIL_SPACING then
+    trail_y_accum = trail_y_accum - TRAIL_SPACING
+    spawn_trail_segment(px, py)
+  end
+
+  update_trail(dt)
 
   engine.set_window_title(string.format(
     "Tiny Ski  |  [%s]  world=(%.0f,%.0f)", gear_name, px, py))
