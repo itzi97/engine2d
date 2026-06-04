@@ -17,14 +17,9 @@ local STEER    = 90
 local MAX_SPD  = 280
 local CAM_LERP = 0.08
 
--- Skier atlas coords (stride = 16, no gap — _packed variant)
--- row 5: sticks-normal (col 10), sticks-behind (col 11)
--- row 6: same poses, alternate colour
-local SKI_FRAMES = {
-  { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE },  -- sticks normal
-  { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE },  -- sticks behind
-}
-local ANIM_SPEED = 0.18   -- seconds per frame
+-- Sprite frames (stride = 16, no gap — _packed variant)
+local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }  -- sticks normal
+local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }  -- sticks behind
 
 -- ── Boot ──────────────────────────────────────────────────────────────────
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
@@ -46,8 +41,7 @@ local atlas = engine.load_texture("assets/ski/tilemap_packed.png")
 local player = world.create_entity()
 world.add_transform(player, spawn_x, spawn_y, TILE, TILE)
 world.add_sprite(player, 255, 255, 255, 255, 10)
-local f0 = SKI_FRAMES[1]
-world.set_sprite_texture(player, atlas, f0.x, f0.y, f0.w, f0.h)
+world.set_sprite_texture(player, atlas, FRAME_IDLE.x, FRAME_IDLE.y, FRAME_IDLE.w, FRAME_IDLE.h)
 world.add_kinematic(player)
 world.add_tag(player, "player")
 
@@ -58,19 +52,21 @@ engine.set_camera(
 )
 
 -- ── Update loop ───────────────────────────────────────────────────────────
-local anim_timer  = 0
-local anim_frame  = 1
+local steering = false  -- track previous steering state to avoid redundant set_sprite_src calls
 
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
-  -- ── Physics ───────────────────────────────────────────────────────────
+  -- ── Input & physics ─────────────────────────────────────────────────────
   local vx, vy = world.get_velocity(player)
   vy = vy + GRAVITY * dt
 
-  if engine.is_key_pressed("left") then
+  local left  = engine.is_key_pressed("left")
+  local right = engine.is_key_pressed("right")
+
+  if left then
     vx = vx - STEER * dt
-  elseif engine.is_key_pressed("right") then
+  elseif right then
     vx = vx + STEER * dt
   else
     vx = vx * (1.0 - 4.0 * dt)
@@ -84,15 +80,19 @@ engine.on_update(function(dt)
 
   world.set_velocity(player, vx, vy)
 
-  -- ── Sprite animation (only while moving) ─────────────────────────────
-  if spd > 10 then
-    anim_timer = anim_timer + dt
-    if anim_timer >= ANIM_SPEED then
-      anim_timer = anim_timer - ANIM_SPEED
-      anim_frame = (anim_frame % #SKI_FRAMES) + 1
-      local f = SKI_FRAMES[anim_frame]
-      world.set_sprite_src(player, f.x, f.y, f.w, f.h)
-    end
+  -- ── Sprite: sticks-behind while steering, sticks-normal otherwise ──────────
+  local is_steering = left or right
+  if is_steering ~= steering then
+    steering = is_steering
+    local f = is_steering and FRAME_STEER or FRAME_IDLE
+    world.set_sprite_src(player, f.x, f.y, f.w, f.h)
+  end
+
+  -- ── Flip sprite left when going left ──────────────────────────────────
+  if vx < -5 then
+    world.set_sprite_flip(player, true, false)
+  elseif vx > 5 then
+    world.set_sprite_flip(player, false, false)
   end
 
   -- ── Camera follow ───────────────────────────────────────────────────────
