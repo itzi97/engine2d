@@ -7,7 +7,6 @@
 #include "scripting/bindings/BindWorld.hpp"
 
 #include <SDL3/SDL.h>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -20,22 +19,22 @@ ScriptingEngine::ScriptingEngine() {
 }
 
 void ScriptingEngine::BindWorld(World *world, TextureManager *textures) {
-  BindWorldLua(m_lua, world, textures);
+  ::BindWorld(m_lua, world, textures, m_lastMap);
 }
 
 void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window,
                                 SDL_Renderer *renderer, SceneManager *scenes) {
-  BindEngine(m_lua, input, window, renderer,
-             m_onUpdate, m_pendingScene, scenes,
-             nullptr /* world — not needed for input/engine bindings */);
+  ::BindEngine(m_lua, input, window, renderer,
+               m_onUpdate, m_pendingScene, scenes,
+               nullptr);
 }
 
 void ScriptingEngine::BindTextures(TextureManager *textures) {
-  BindTexturesLua(m_lua, textures);
+  ::BindTextures(m_lua, textures);
 }
 
 void ScriptingEngine::BindAudio(AudioManager *audio) {
-  BindAudioLua(m_lua, audio);
+  ::BindAudio(m_lua, audio);
 }
 
 bool ScriptingEngine::RunString(const char *src, const char *chunkName) {
@@ -58,6 +57,10 @@ bool ScriptingEngine::RunFile(const std::string &path) {
   std::ostringstream ss;
   ss << f.rdbuf();
   return RunString(ss.str().c_str(), path.c_str());
+}
+
+bool ScriptingEngine::RunScript(const std::filesystem::path &path) {
+  return RunFile(path.string());
 }
 
 void ScriptingEngine::QueueScene(std::function<void()> fn) {

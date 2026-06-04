@@ -3,6 +3,9 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <filesystem>
+
+#include "map/TiledMap.hpp"
 
 class AudioManager;
 class InputManager;
@@ -23,9 +26,11 @@ public:
   void BindTextures(TextureManager *textures);
   void BindAudio   (AudioManager *audio);
 
-  // Run a Lua source string or a file on disk.
+  // Run Lua source or file.
   bool RunString(const char *src, const char *chunkName);
   bool RunFile  (const std::string &path);
+  // Overload used by SceneManager (takes filesystem::path directly).
+  bool RunScript(const std::filesystem::path &path);
 
   // Queue a C++ callable to run at the next scene-transition point.
   void QueueScene(std::function<void()> fn);
@@ -39,4 +44,5 @@ private:
   sol::state             m_lua;
   sol::function          m_onUpdate;
   std::function<void()>  m_pendingScene;
+  std::optional<TiledMap> m_lastMap;
 };
