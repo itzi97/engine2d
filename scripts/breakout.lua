@@ -1,5 +1,12 @@
 -- breakout.lua  (loaded at runtime via dofile from main_menu)
 -- Controls: LEFT/RIGHT to move. ESCAPE = pause. R = resume. M = main menu.
+--
+-- Bricks are driven entirely by the tilemap object layer.
+-- Each brick object must have class="brick" and custom properties:
+--   color_r, color_g, color_b  (int, 0-255)
+-- The map determines brick count, layout, and colours.
+-- Level 1: full 8x6 grid, warm palette.
+-- Level 2: checkerboard gaps (24 bricks), neon palette.
 
 engine.set_window_title("Breakout")
 engine.set_window_size(1280, 720)
@@ -7,11 +14,7 @@ engine.set_window_size(1280, 720)
 local W, H           = 1280, 720
 local BALL_S         = 16
 local PAD_W, PAD_H   = 120, 14
-local BRICK_W, BRICK_H         = 74, 24
-local BRICK_COLS, BRICK_ROWS   = 14, 6
-local BRICK_PADDING  = 8
-local BRICK_OFFSET_X = 43
-local BRICK_OFFSET_Y = 60
+local BRICK_W, BRICK_H = 72, 20
 local PAD_SPEED      = 520
 
 local LEVELS = {
@@ -44,7 +47,6 @@ end
 
 local function make_pause_overlay()
   local cx = W / 2
-  -- Visible position of the background panel
   local BG_X = cx - 160
   local BG_Y = H/2 - 90
 
@@ -83,7 +85,6 @@ local function make_pause_overlay()
 
   return {
     show = function(sel)
-      -- Restore bg to its visible position
       world.set_position(bg, BG_X, BG_Y)
       world.set_text(title, "PAUSED")
       world.set_text(opt1,  "Resume")
@@ -92,8 +93,6 @@ local function make_pause_overlay()
       refresh(sel)
     end,
     hide = function()
-      -- Move bg far off-screen; RenderSystem has no blend mode for
-      -- color-rect sprites so alpha=0 does not hide them.
       world.set_position(bg, -9999, -9999)
       world.set_text(title, "")
       world.set_text(opt1,  "")
@@ -246,40 +245,43 @@ end
 
 function init()
   local lv = LEVELS[chosen_level]
-  world.load_tiled_map(lv.map)
+
+  -- Load map and build brick list from the object layer.
+  -- Each object has class="brick" and properties color_r, color_g, color_b.
+  -- world.load_tiled_map returns objects keyed by name; we scan all entries
+  -- and collect those whose type == "brick".
+  local map_objects = world.load_tiled_map(lv.map)
   log("breakout: loaded map " .. lv.map)
+
+  local bricks = {}
+  for name, obj in pairs(map_objects) do
+    if obj.type == "brick" then
+      local r = tonumber(obj.properties["color_r"]) or 200
+      local g = tonumber(obj.properties["color_g"]) or 200
+      local b = tonumber(obj.properties["color_b"]) or 200
+      local e = world.create_entity()
+      world.add_transform(e, obj.x, obj.y, obj.w, obj.h)
+      world.add_sprite(e, r, g, b, 255)
+      world.add_tag(e, "brick")
+      table.insert(bricks, { entity = e, alive = true })
+    end
+  end
+
+  local total_bricks = #bricks
+  log("breakout: spawned " .. total_bricks .. " bricks from map")
 
   local ball_entity      = make_entity(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
   local ball_vx, ball_vy = 260, -320
   local paddle_entity    = make_entity(W/2 - PAD_W/2, H - 48, PAD_W, PAD_H, 80, 160, 255)
   world.add_tag(paddle_entity, "paddle")
 
-  local bricks  = {}
-  local colours = {
-    {220, 50,  50 }, {220, 130, 50 }, {220, 220, 50 },
-    {50,  220, 50 }, {50,  180, 220}, {130, 50,  220},
-  }
-  for row = 0, BRICK_ROWS - 1 do
-    local c = colours[row + 1]
-    for col = 0, BRICK_COLS - 1 do
-      local e = make_entity(
-        BRICK_OFFSET_X + col * (BRICK_W + BRICK_PADDING),
-        BRICK_OFFSET_Y + row * (BRICK_H + BRICK_PADDING),
-        BRICK_W, BRICK_H, c[1], c[2], c[3]
-      )
-      world.add_tag(e, "brick")
-      table.insert(bricks, {entity = e, alive = true})
-    end
-  end
-
   local score_entity = world.create_entity()
   world.add_transform(score_entity, 10, 4, 0, 0)
   world.add_text(score_entity, "Score: 0", 22, 255, 255, 255)
 
-  local score        = 0
-  local paused       = false
-  local pause_sel    = 1
-  local total_bricks = BRICK_COLS * BRICK_ROWS
+  local score     = 0
+  local paused    = false
+  local pause_sel = 1
 
   local overlay = make_pause_overlay()
   overlay.hide()
@@ -340,9 +342,9 @@ function init()
 
     local hits    = world.get_collisions_for(ball_entity)
     local bounced = false
-    local alive_count = total_bricks
+    local alive_count = 0
     for _, brick in ipairs(bricks) do
-      if not brick.alive then alive_count = alive_count - 1 end
+      if brick.alive then alive_count = alive_count + 1 end
     end
 
     for _, col in ipairs(hits) do
@@ -361,7 +363,7 @@ function init()
           if brick.alive and brick.entity == other then
             if not bounced then
               local rx, ry = world.get_position(other)
-              local side   = hit_side(bx, by, BALL_S, BALL_S, rx, ry, BRICK_W, BRICK_H)
+              local side   = hit_side(bx, by, BALL_S, BALL_S, rx, ry, brick_w or BRICK_W, brick_h or BRICK_H)
               if side == "left" or side == "right" then ball_vx = -ball_vx
               else ball_vy = -ball_vy end
               bounced = true
