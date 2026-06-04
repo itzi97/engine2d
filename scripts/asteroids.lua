@@ -63,11 +63,7 @@ local ship_angle = 0   -- degrees, 0 = up
 local invuln     = 0
 local fire_cd    = 0
 
--- Asteroids are still manually advanced (no KinematicComponent) so we can
--- spin them independently of their linear motion.
 local asteroids  = {}   -- { id, vx, vy, rot_speed, rot, size }
--- Bullets have a KinematicComponent so PhysicsSystem integrates them;
--- we only track life here.
 local bullets    = {}   -- { id, life }
 local explosions = {}   -- { id, timer }
 
@@ -142,7 +138,7 @@ local function spawn_player(x, y)
     world.add_animation(player, SHIP_FRAMES, 0.12)
   end
   world.add_tag(player, "player")
-  world.add_kinematic(player)          -- must come before set_velocity
+  world.add_kinematic(player)
   world.set_velocity(player, 0, 0)
   invuln  = INVULN_TIME
   fire_cd = 0
@@ -159,14 +155,25 @@ local function update_hud()
 end
 
 -- ---------------------------------------------------------------------------
--- Load wave from Tiled map
+-- Load wave from Tiled map  (called in-place — no scene reload)
 -- ---------------------------------------------------------------------------
 local function load_wave(w_idx)
+  -- Destroy leftover entities from the previous wave
+  if player then world.destroy_entity(player); player = nil end
+  for _, b in ipairs(bullets)    do world.destroy_entity(b.id)  end
+  for _, a in ipairs(asteroids)  do world.destroy_entity(a.id)  end
+  for _, ex in ipairs(explosions) do world.destroy_entity(ex.id) end
+
   asteroids  = {}
   bullets    = {}
   explosions = {}
   wave_clear = false
   wc_timer   = 0
+
+  -- Clear the overlay text from the previous wave banner
+  if hud_overlay then
+    world.set_text(hud_overlay, "")
+  end
 
   local map_path = MAP_WAVE[w_idx]
   local objects  = world.load_tiled_map(map_path)
@@ -189,6 +196,8 @@ local function load_wave(w_idx)
       spawn_asteroid(obj.x + obj.w/2, obj.y + obj.h/2, size, speed_mul)
     end
   end
+
+  update_hud()
 end
 
 -- ---------------------------------------------------------------------------
@@ -292,16 +301,13 @@ engine.on_update(function(dt)
     if wc_timer <= 0 then
       wave = wave + 1
       if wave > #MAP_WAVE then
-        -- All waves completed — show win screen without reloading the scene
         you_win = true
         world.set_text(hud_overlay, "YOU WIN!   ENTER play again   ESC menu")
         world.set_text_color(hud_overlay, 80, 255, 180, 255)
       else
-        engine.load_scene(function()
-          -- Carry score and lives into the new scene via globals
-          local s, l, w_idx = score, lives, wave
-          dofile("scripts/asteroids.lua")
-        end)
+        -- Stay in the same Lua state — just reload the map in-place.
+        -- wave/score/lives are already the correct upvalues.
+        load_wave(wave)
       end
     end
     return
@@ -332,33 +338,30 @@ engine.on_update(function(dt)
     local px, py = world.get_position(player)
     local cx, cy = wrap(px + 24, py + 24)
     world.set_position(player, cx - 24, cy - 24)
-    px, py = world.get_position(player)   -- re-read for fire origin below
+    px, py = world.get_position(player)
 
     -- fire
     if engine.is_key_just_pressed("SPACE") and fire_cd == 0 then
       fire_cd   = FIRE_COOLDOWN
       local rad = deg2rad(ship_angle - 90)
-      -- spawn bullet at ship nose
       local bx  = px + 24 + math.cos(rad) * 26
       local by  = py + 24 + math.sin(rad) * 26
       local b   = world.create_entity()
       world.add_transform(b, bx - 2, by - 5, 4, 10)
       world.add_sprite(b, 255, 255, 120, 255, 3)
       world.add_tag(b, "bullet")
-      -- rotate the bullet sprite to match the ship heading
       world.set_rotation(b, ship_angle)
-      -- give it a KinematicComponent so PhysicsSystem integrates it
       local pvx, pvy = world.get_velocity(player)
       local bvx = math.cos(rad) * BULLET_SPEED + pvx
       local bvy = math.sin(rad) * BULLET_SPEED + pvy
-      world.add_kinematic(b)             -- must come before set_velocity
+      world.add_kinematic(b)
       world.set_velocity(b, bvx, bvy)
       bullets[#bullets + 1] = { id = b, life = BULLET_LIFE }
       if sfx_laser ~= -1 then engine.play_sfx(sfx_laser, 0.8) end
     end
   end
 
-  -- ---- move asteroids (manual — spin is independent of linear motion) -------
+  -- ---- move asteroids -------------------------------------------------------
   for _, a in ipairs(asteroids) do
     local ax, ay = world.get_position(a.id)
     local rs     = ASTEROID_RENDER[a.size] or 32
@@ -370,18 +373,13 @@ engine.on_update(function(dt)
     world.set_rotation(a.id, a.rot)
   end
 
-  -- ---- wrap bullets (PhysicsSystem moved them; we just wrap + age) ----------
+  -- ---- age bullets (no wrapping — bullets expire when they leave the screen) -
   local live_bullets = {}
   for _, b in ipairs(bullets) do
     b.life = b.life - dt
     if b.life <= 0 then
       world.destroy_entity(b.id)
     else
-      local bx, by = world.get_position(b.id)
-      local cx, cy = wrap(bx + 2, by + 5)
-      if cx ~= bx + 2 or cy ~= by + 5 then
-        world.set_position(b.id, cx - 2, cy - 5)
-      end
       live_bullets[#live_bullets + 1] = b
     end
   end
