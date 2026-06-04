@@ -51,7 +51,8 @@ engine.set_camera(
 )
 
 -- ── Update loop ───────────────────────────────────────────────────────────
-engine.on_update = function(dt)
+-- NOTE: engine.on_update is a C++ setter — use call syntax, not assignment.
+engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
   local vx, vy = world.get_velocity(player)
@@ -117,4 +118,4 @@ engine.on_update = function(dt)
     world.set_position(player, math.floor((px + pw) / TILE) * TILE - pw, py)
     if vx > 0 then world.set_velocity(player, 0, vy) end
   end
-end
+end)
