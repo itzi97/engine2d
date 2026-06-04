@@ -1,7 +1,5 @@
-// -- All sol2 includes for this TU -----------------------------------------
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
-// --------------------------------------------------------------------------
 
 #include "scripting/ScriptingEngine.hpp"
 
@@ -17,6 +15,7 @@
 #include "rendering/FontManager.hpp"
 #include "rendering/TextureManager.hpp"
 #include "ecs/World.hpp"
+#include "core/SceneManager.hpp"
 
 #include <SDL3/SDL.h>
 #include <iostream>
@@ -27,9 +26,6 @@ struct ScriptingEngine::Impl {
   sol::function         onUpdateFn;
   std::function<void()> pendingScene;
   bool                  loggedOnUpdateCheck = false;
-
-  // Owns the most-recently loaded TiledMap. Address is stable (heap via
-  // unique_ptr<Impl>); BindMapValidation captures a pointer to this field.
   std::optional<TiledMap> lastMap;
 
   Impl() {
@@ -46,12 +42,12 @@ ScriptingEngine::~ScriptingEngine() = default;
 
 void ScriptingEngine::BindWorld(World *world, TextureManager *textures) {
   ::BindWorld(m_impl->lua, world, textures, m_impl->lastMap);
-  // Pass &lastMap (pointer-to-optional) so validate_map() always resolves
-  // through the live optional regardless of when load_tiled_map is called.
   ::BindMapValidation(m_impl->lua, &m_impl->lastMap);
 }
-void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window) {
-  ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn, m_impl->pendingScene);
+void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window,
+                                SceneManager *scenes) {
+  ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn,
+               m_impl->pendingScene, scenes);
 }
 void ScriptingEngine::BindFonts(FontManager *) {}
 void ScriptingEngine::BindTextures(TextureManager *textures) {
@@ -66,6 +62,10 @@ void ScriptingEngine::ResetOnUpdate() {
   m_impl->loggedOnUpdateCheck = false;
 }
 
+void ScriptingEngine::QueueScene(std::function<void()> fn) {
+  m_impl->pendingScene = std::move(fn);
+}
+
 std::function<void()> ScriptingEngine::TakePendingScene() {
   return std::exchange(m_impl->pendingScene, nullptr);
 }
@@ -76,7 +76,6 @@ void ScriptingEngine::CallOnUpdate(float dt) {
     std::cout << "[ScriptingEngine] frame-1 on_update.valid() = "
               << m_impl->onUpdateFn.valid() << '\n';
   }
-
   if (m_impl->onUpdateFn.valid()) {
     auto result = m_impl->onUpdateFn(dt);
     if (!result.valid()) {

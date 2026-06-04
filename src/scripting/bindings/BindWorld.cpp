@@ -181,6 +181,29 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
         return "";
       });
 
+  // Returns a Lua array of entity IDs that have the given tag.
+  // Usage: local obstacles = world.get_entities_tagged("obstacle")
+  w.set_function("get_entities_tagged",
+      [&lua, world](const std::string &tag) -> sol::table {
+        auto tbl = lua.create_table();
+        const auto ids = world->GetEntitiesTagged(tag);
+        for (std::size_t i = 0; i < ids.size(); ++i)
+          tbl[static_cast<int>(i + 1)] = ids[i];
+        return tbl;
+      });
+
+  // Returns a Lua array of ALL entity IDs that have a TagComponent.
+  // Tag everything you want to be able to query — untagged entities are invisible here.
+  w.set_function("get_all_entities",
+      [&lua, world]() -> sol::table {
+        auto tbl = lua.create_table();
+        // Collect from tag storage — every entity scripts care about should be tagged.
+        const auto it = world->View<TagComponent>();
+        for (std::size_t i = 0; i < it.entities.size(); ++i)
+          tbl[static_cast<int>(i + 1)] = it.entities[i];
+        return tbl;
+      });
+
   // --- TextComponent ------------------------------------------------------
   w.set_function("add_text",
       [world](EntityId e, const std::string &text, int size,
@@ -249,8 +272,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
       });
 
   // --- Tiled map loading --------------------------------------------------
-  // On success, the loaded TiledMap is written into lastMap so that
-  // world.validate_map() (BindMapValidation) can inspect it.
   w.set_function("load_tiled_map",
       [&lua, world, textures, &lastMap](const std::string &path) -> sol::table {
         TiledMap map;
@@ -262,8 +283,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
         }
 
         SpawnResult result = MapSystem::Spawn(map, *world, *textures);
-
-        // Persist the map so validate_map() can inspect it
         lastMap = std::move(map);
 
         auto tbl = lua.create_table();

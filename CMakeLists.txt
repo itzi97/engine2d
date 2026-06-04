@@ -167,6 +167,8 @@ execute_process(
 set(ENGINE_SOURCES
     src/main.cpp
     src/core/Game.cpp
+    src/core/SceneManager.cpp
+    src/core/HotReload.cpp
     src/audio/AudioManager.cpp
     src/audio/stb_vorbis_impl.c
     src/ecs/World.cpp
@@ -202,6 +204,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     FONT_PATH="${FONT_DIR}/DejaVuSans.ttf"
+    $<$<CONFIG:Debug>:HOTRELOAD_ENABLED>
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

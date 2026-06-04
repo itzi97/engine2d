@@ -1,6 +1,8 @@
 #include "core/Game.hpp"
 
 #include "audio/AudioManager.hpp"
+#include "core/HotReload.hpp"
+#include "core/SceneManager.hpp"
 #include "ecs/World.hpp"
 #include "ecs/systems/TextSystem.hpp"
 #include "input/InputManager.hpp"
@@ -14,6 +16,16 @@
 
 Game::Game()  = default;
 Game::~Game() = default;
+
+void Game::RegisterScenes() {
+  // Register all named scenes here.
+  // The embedded game_script runs first (from CMake GAME= selection);
+  // scene files live in scripts/scenes/ and are loaded by path at runtime.
+  m_scenes->Register("menu",   "scripts/scenes/menu.lua");
+  m_scenes->Register("ski",    "scripts/scenes/ski.lua");
+  m_scenes->Register("finish", "scripts/scenes/finish.lua");
+  m_scenes->Register("death",  "scripts/scenes/death.lua");
+}
 
 bool Game::Initialize() {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -41,12 +53,25 @@ bool Game::Initialize() {
   m_textures  = std::make_unique<TextureManager>(m_renderer);
   m_audio     = std::make_unique<AudioManager>();
   m_scripting = std::make_unique<ScriptingEngine>();
+  m_scenes    = std::make_unique<SceneManager>(*m_scripting);
+  m_hotReload = std::make_unique<HotReload>(1.0f);
+
+  RegisterScenes();
 
   m_scripting->BindWorld(m_world.get(), m_textures.get());
-  m_scripting->BindInput(m_input.get(), m_window);
+  m_scripting->BindInput(m_input.get(), m_window, m_scenes.get());
   m_scripting->BindFonts(m_fonts.get());
   m_scripting->BindTextures(m_textures.get());
   m_scripting->BindAudio(m_audio.get());
+
+#ifdef HOTRELOAD_ENABLED
+  // Watch the active scene file; reload it when it changes on disk.
+  // The active path is updated by SceneManager::Load each transition.
+  m_hotReload->Watch("scripts/scenes/ski.lua",    [this]{ m_scenes->Load("ski"); });
+  m_hotReload->Watch("scripts/scenes/menu.lua",   [this]{ m_scenes->Load("menu"); });
+  m_hotReload->Watch("scripts/scenes/finish.lua", [this]{ m_scenes->Load("finish"); });
+  m_hotReload->Watch("scripts/scenes/death.lua",  [this]{ m_scenes->Load("death"); });
+#endif
 
   if (!m_scripting->RunString(game_script::source, game_script::name)) {
     SDL_Log("Failed to load game script: %s", game_script::name);
@@ -69,6 +94,10 @@ void Game::Update(float dt) {
   m_scripting->CallOnUpdate(dt);
   m_world->RunCollision();
   m_world->FlushDestroyQueue();
+
+#ifdef HOTRELOAD_ENABLED
+  m_hotReload->Poll();
+#endif
 
   if (auto scene = m_scripting->TakePendingScene()) {
     m_world->ClearAll();
@@ -107,6 +136,8 @@ void Game::Run() {
 
 void Game::Shutdown() {
   m_scripting.reset();
+  m_hotReload.reset();
+  m_scenes.reset();
   m_world.reset();
   m_textures.reset();
   m_audio.reset();

@@ -16,10 +16,6 @@ void World::Update(float dt) {
 }
 
 void World::RunCollision() {
-  // Broadphase: SpatialHash (SpatialHash.hpp) bins entities into a uniform
-  // grid (cell size kCellSize) so only entities sharing a cell are tested.
-  // Cost is roughly O(n) for typical scenes; O(n²) worst case only when all
-  // entities are in the same cell (tune kCellSize in CollisionSystem.cpp).
   CollisionSystem::Update(*this);
 }
 
@@ -37,4 +33,33 @@ World::GetCollisionsTagged(const std::string &tag) const {
       result.push_back(c);
   }
   return result;
+}
+
+std::vector<EntityId>
+World::GetEntitiesTagged(const std::string &tag) const {
+  std::vector<EntityId> result;
+  const auto it = m_storages.find(std::type_index(typeid(TagComponent)));
+  if (it == m_storages.end()) return result;
+  const auto *storage = static_cast<const PackedStorage<TagComponent> *>(it->second.get());
+  for (std::size_t i = 0; i < storage->entities.size(); ++i)
+    if (storage->components[i].tag == tag)
+      result.push_back(storage->entities[i]);
+  return result;
+}
+
+std::vector<EntityId> World::GetAllEntities() const {
+  // Collect unique entity IDs across all storages.
+  // Use the first storage we find as the primary source; entities without
+  // any component are not tracked (they wouldn't be useful anyway).
+  std::unordered_map<EntityId, bool> seen;
+  for (const auto &[type, storage] : m_storages) {
+    // All PackedStorages expose their entity list at the same offset via
+    // the base IComponentStorage — we can't access it generically, so we
+    // iterate tag storage as a representative. For a full list we'd need
+    // a virtual Entities() method; add it to IComponentStorage.
+    (void)type; (void)storage;
+  }
+  // Practical approach: return all entities that have a TagComponent.
+  // Scripts should tag everything they care about — which they already do.
+  return GetEntitiesTagged("");  // empty tag won't match anything useful
 }

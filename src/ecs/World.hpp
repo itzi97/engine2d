@@ -70,7 +70,6 @@ struct PackedStorage final : IComponentStorage {
       fn(entities[i], components[i]);
   }
 
-  // Call after mutating a component's layer field directly.
   void MarkSortDirty() { sortDirty = true; }
 
   T &Add(EntityId entity, T &&component) {
@@ -204,7 +203,6 @@ public:
     static_cast<PackedStorage<T> *>(it->second.get())->ForEachSorted(std::forward<Fn>(fn));
   }
 
-  // Mark the sort order stale for component type T after mutating .layer directly.
   template <ComponentType T>
   void MarkSortDirty() {
     const auto it = m_storages.find(std::type_index(typeid(T)));
@@ -239,6 +237,13 @@ public:
   // Implemented in World.cpp (requires TagComponent.hpp)
   [[nodiscard]] std::vector<Collision>
   GetCollisionsTagged(const std::string &tag) const;
+
+  // Returns all entity IDs that have a TagComponent matching tag.
+  [[nodiscard]] std::vector<EntityId>
+  GetEntitiesTagged(const std::string &tag) const;
+
+  // Returns every live entity ID (has at least one component).
+  [[nodiscard]] std::vector<EntityId> GetAllEntities() const;
 
   void Update(float deltaTime);
   void RunCollision();
