@@ -9,6 +9,7 @@
 #include "scripting/ScriptingEngine.hpp"
 
 #include <SDL3/SDL.h>
+#include <iostream>
 
 #include "game_script_shim.hpp"
 
@@ -16,8 +17,6 @@ Game::Game()  = default;
 Game::~Game() = default;
 
 bool Game::Initialize() {
-  // Tell SDL to bypass WM focus-stealing prevention so the window
-  // gets keyboard focus immediately without a manual click.
   SDL_SetHint(SDL_HINT_FORCE_RAISEWINDOW, "1");
 
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -63,6 +62,7 @@ bool Game::Initialize() {
 void Game::ProcessEvents(bool &running) {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
+    std::cout << "[SDL] event type=0x" << std::hex << event.type << std::dec << "\n";
     if (event.type == SDL_EVENT_QUIT) running = false;
     m_input->ProcessEvent(event);
   }
@@ -96,8 +96,6 @@ void Game::Run() {
   float accumulator = 0.f;
 
   while (running) {
-    // 1. Clear one-frame transition flags from the previous logical tick
-    //    BEFORE polling so fresh events fill m_justPressed cleanly.
     m_input->EndFrame();
 
     const auto  now = steady_clock::now();
@@ -107,12 +105,8 @@ void Game::Run() {
 
     const float dt = (raw < 0.05f) ? raw : 0.05f;
 
-    // 2. Pump all pending SDL events into InputManager.
     ProcessEvents(running);
 
-    // 3. Run as many fixed-step ticks as the accumulator allows.
-    //    m_justPressed survives here because EndFrame() won't fire
-    //    again until the top of the next real-frame iteration.
     accumulator += dt;
     while (accumulator >= kFixedDt) {
       Update(kFixedDt);
