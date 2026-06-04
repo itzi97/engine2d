@@ -36,8 +36,8 @@ struct ScriptingEngine::Impl {
 ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
 ScriptingEngine::~ScriptingEngine() = default;
 
-void ScriptingEngine::BindWorld(World *world) {
-  ::BindWorld(m_impl->lua, world);
+void ScriptingEngine::BindWorld(World *world, TextureManager *textures) {
+  ::BindWorld(m_impl->lua, world, textures);
 }
 void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window) {
   ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn, m_impl->pendingScene);

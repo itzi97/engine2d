@@ -11,8 +11,6 @@ include(cmake/EmbedScript.cmake)
 # ---------------------------------------------------------------------------
 # Game selection
 # ---------------------------------------------------------------------------
-# Default is main_menu — the shared entry point that dofile()s game scripts.
-# Use -DGAME=snake or -DGAME=breakout to launch a game directly (dev/testing).
 set(GAME "main_menu" CACHE STRING "Game script to embed (filename without .lua)")
 set_property(CACHE GAME PROPERTY STRINGS main_menu snake breakout sprite_test audio_test)
 
@@ -122,8 +120,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 # -- stb_vorbis (header-only, OGG decode) ------------------------------------
-# We vendor a single-header stb_vorbis for OGG loading since SDL3 only
-# ships with WAV support built-in.
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -132,7 +128,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
-# stb_vorbis.c is third-party code — suppress all warnings for that TU only.
 set_source_files_properties(src/audio/stb_vorbis_impl.c PROPERTIES
     COMPILE_OPTIONS "-w"
 )
@@ -181,6 +176,8 @@ set(ENGINE_SOURCES
     src/ecs/systems/RenderSystem.cpp
     src/ecs/systems/TextSystem.cpp
     src/input/InputManager.cpp
+    src/map/MapLoader.cpp
+    src/map/MapSystem.cpp
     src/rendering/FontManager.cpp
     src/rendering/TextureManager.cpp
     src/scripting/ScriptingEngine.cpp
