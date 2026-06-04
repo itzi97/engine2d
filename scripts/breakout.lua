@@ -1,5 +1,5 @@
 -- breakout.lua
--- Controls: LEFT / RIGHT arrows to move paddle. R to reset.
+-- Controls: LEFT / RIGHT arrows to move paddle. R to reset. ESCAPE to quit.
 
 engine.set_window_title("Breakout")
 engine.set_window_size(1280, 720)
@@ -77,6 +77,8 @@ local function init()
   -- ── update ───────────────────────────────────────────────────────────────────
 
   engine.on_update(function(dt)
+    if engine.is_key_just_pressed("ESCAPE") then engine.quit() end
+
     if game_over or won then
       if engine.is_key_pressed("R") then engine.load_scene(init) end
       return

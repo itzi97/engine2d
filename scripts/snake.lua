@@ -96,6 +96,8 @@ local function init()
   -- ── update ───────────────────────────────────────────────────────────────────
 
   engine.on_update(function(dt)
+    if engine.is_key_just_pressed("ESCAPE") then engine.quit() end
+
     if engine.is_key_pressed("UP")    and dir.y ~=  1 then next_dir = {x=0,  y=-1} end
     if engine.is_key_pressed("DOWN")  and dir.y ~= -1 then next_dir = {x=0,  y= 1} end
     if engine.is_key_pressed("LEFT")  and dir.x ~=  1 then next_dir = {x=-1, y= 0} end

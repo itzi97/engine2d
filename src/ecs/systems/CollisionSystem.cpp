@@ -5,7 +5,7 @@
 
 // Cell size: ~2× the average entity footprint in world units.
 // Tune this if entity sizes change significantly (e.g. large tiles vs small bullets).
-static constexpr int kCellSize = 64;
+static constexpr float kCellSize = 64.f;
 
 static bool Overlaps(const TransformComponent& a, const TransformComponent& b) {
     const float aw = a.size.x * a.scale.x;

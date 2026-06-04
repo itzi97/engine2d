@@ -18,7 +18,7 @@
 
 class SpatialHash {
 public:
-    explicit SpatialHash(int cellSize) : m_cell(cellSize) {}
+    explicit SpatialHash(float cellSize) : m_cell(cellSize) {}
 
     void Clear() { m_cells.clear(); }
 
@@ -52,7 +52,7 @@ public:
     }
 
 private:
-    int m_cell;
+    float m_cell;
     std::unordered_map<uint64_t, std::vector<EntityId>> m_cells;
 
     // Pack two signed cell coords into one 64-bit key.
