@@ -18,8 +18,10 @@
 #include "rendering/TextureManager.hpp"
 
 #include <SDL3/SDL.h>
+#include <optional>
 
-void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
+void BindWorld(sol::state &lua, World *world, TextureManager *textures,
+               std::optional<TiledMap> &lastMap) {
   auto w = lua.create_named_table("world");
 
   // --- Entity lifecycle ---------------------------------------------------
@@ -218,12 +220,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
       });
 
   // --- Visibility ---------------------------------------------------------
-  // Hides or shows an entity without destroying it or clearing its state.
-  // Works on any entity that has a SpriteComponent, a TextComponent, or both.
-  // Silently no-ops if the entity has neither (safe to call on any entity).
-  //
-  //   world.set_visible(id, false)  -- hide
-  //   world.set_visible(id, true)   -- show
   w.set_function("set_visible",
       [world](EntityId e, bool v) {
         if (auto *s  = world->GetComponent<SpriteComponent>(e)) s->visible  = v;
@@ -253,8 +249,10 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
       });
 
   // --- Tiled map loading --------------------------------------------------
+  // On success, the loaded TiledMap is written into lastMap so that
+  // world.validate_map() (BindMapValidation) can inspect it.
   w.set_function("load_tiled_map",
-      [&lua, world, textures](const std::string &path) -> sol::table {
+      [&lua, world, textures, &lastMap](const std::string &path) -> sol::table {
         TiledMap map;
         try {
             map = MapLoader::Load(path);
@@ -264,6 +262,9 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
         }
 
         SpawnResult result = MapSystem::Spawn(map, *world, *textures);
+
+        // Persist the map so validate_map() can inspect it
+        lastMap = std::move(map);
 
         auto tbl = lua.create_table();
         for (std::size_t i = 0; i < result.objectEntities.size(); ++i) {

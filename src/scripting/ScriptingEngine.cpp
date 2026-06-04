@@ -7,23 +7,30 @@
 
 #include "scripting/bindings/BindAudio.hpp"
 #include "scripting/bindings/BindEngine.hpp"
+#include "scripting/bindings/BindMapValidation.hpp"
 #include "scripting/bindings/BindTextures.hpp"
 #include "scripting/bindings/BindWorld.hpp"
 
 #include "audio/AudioManager.hpp"
 #include "input/InputManager.hpp"
+#include "map/TiledMap.hpp"
 #include "rendering/FontManager.hpp"
 #include "rendering/TextureManager.hpp"
 #include "ecs/World.hpp"
 
 #include <SDL3/SDL.h>
 #include <iostream>
+#include <optional>
 
 struct ScriptingEngine::Impl {
   sol::state            lua;
   sol::function         onUpdateFn;
   std::function<void()> pendingScene;
   bool                  loggedOnUpdateCheck = false;  // fires once on frame 1
+
+  // Owns the most-recently loaded TiledMap so that world.validate_map()
+  // always has a stable pointer to inspect.
+  std::optional<TiledMap> lastMap;
 
   Impl() {
     lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
@@ -38,7 +45,12 @@ ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
 ScriptingEngine::~ScriptingEngine() = default;
 
 void ScriptingEngine::BindWorld(World *world, TextureManager *textures) {
-  ::BindWorld(m_impl->lua, world, textures);
+  ::BindWorld(m_impl->lua, world, textures, m_impl->lastMap);
+  // validate_map() reads from lastMap; pass nullptr until first successful
+  // load_tiled_map() call (BindMapValidation re-reads via the stored pointer
+  // each invocation, so it picks up updates automatically).
+  ::BindMapValidation(m_impl->lua,
+      m_impl->lastMap.has_value() ? &m_impl->lastMap.value() : nullptr);
 }
 void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window) {
   ::BindEngine(m_impl->lua, input, window, m_impl->onUpdateFn, m_impl->pendingScene);
@@ -63,9 +75,6 @@ std::function<void()> ScriptingEngine::TakePendingScene() {
 }
 
 void ScriptingEngine::CallOnUpdate(float dt) {
-  // One-shot sanity check: log whether on_update was registered by the time
-  // the first frame runs.  If this prints 0, RunScript executed after the
-  // first CallOnUpdate tick, or engine.on_update was never called in Lua.
   if (!m_impl->loggedOnUpdateCheck) {
     m_impl->loggedOnUpdateCheck = true;
     std::cout << "[ScriptingEngine] frame-1 on_update.valid() = "
