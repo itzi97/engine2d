@@ -12,7 +12,7 @@ include(cmake/EmbedScript.cmake)
 # Game selection
 # ---------------------------------------------------------------------------
 set(GAME "snake" CACHE STRING "Game script to embed (filename without .lua)")
-set_property(CACHE GAME PROPERTY STRINGS snake breakout sprite_test)
+set_property(CACHE GAME PROPERTY STRINGS snake breakout sprite_test audio_test)
 
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/scripts/${GAME}.lua")
   message(FATAL_ERROR "Game script not found: scripts/${GAME}.lua")
@@ -119,6 +119,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# -- stb_vorbis (header-only, OGG decode) ------------------------------------
+# We vendor a single-header stb_vorbis for OGG loading since SDL3 only
+# ships with WAV support built-in.
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(stb)
+
+# stb_vorbis.c is third-party code — suppress all warnings for that TU only.
+set_source_files_properties(src/audio/stb_vorbis_impl.c PROPERTIES
+    COMPILE_OPTIONS "-w"
+)
+
 # -- DejaVu Sans font ---------------------------------------------------------
 set(FONT_DIR  "${CMAKE_SOURCE_DIR}/assets/fonts")
 set(FONT_FILE "${FONT_DIR}/DejaVuSans.ttf")
@@ -154,6 +170,8 @@ execute_process(
 set(ENGINE_SOURCES
     src/main.cpp
     src/core/Game.cpp
+    src/audio/AudioManager.cpp
+    src/audio/stb_vorbis_impl.c
     src/ecs/World.cpp
     src/ecs/components/KinematicComponent.cpp
     src/ecs/components/SpriteComponent.cpp
@@ -176,6 +194,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${GENERATED_DIR}"
     "${LUA_SHIM_DIR}"
     "${lua_SOURCE_DIR}"
+    "${stb_SOURCE_DIR}"
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE

@@ -6,6 +6,7 @@
 #include "scripting/ScriptingEngine.hpp"
 #include "scripting/RawBinding.hpp"
 
+#include "audio/AudioManager.hpp"
 #include "ecs/World.hpp"
 #include "ecs/Entity.hpp"
 #include "ecs/components/AnimationComponent.hpp"
@@ -19,24 +20,42 @@
 #include "rendering/TextureManager.hpp"
 
 #include <SDL3/SDL.h>
+#include <cctype>
 #include <iostream>
 
+// Converts an engine-facing uppercase key name (e.g. "SPACE", "F", "UP") to
+// the SDL keycode that SDL_KeyboardEvent.key will carry for that physical key.
+//
+// Special cases are keys whose Lua-facing name differs from SDL's canonical
+// name (the string SDL_GetKeyFromName expects). Everything else is lowercased
+// and forwarded to SDL_GetKeyFromName so the mapping is always in sync with
+// the runtime SDL build, regardless of keyboard layout.
 static SDL_Keycode KeycodeFromString(const std::string &key) {
-  if (key == "UP")     return SDLK_UP;
-  if (key == "DOWN")   return SDLK_DOWN;
-  if (key == "LEFT")   return SDLK_LEFT;
-  if (key == "RIGHT")  return SDLK_RIGHT;
-  if (key == "W")      return SDLK_W;
-  if (key == "S")      return SDLK_S;
-  if (key == "A")      return SDLK_A;
-  if (key == "D")      return SDLK_D;
-  if (key == "SPACE")  return SDLK_SPACE;
-  if (key == "RETURN") return SDLK_RETURN;
-  if (key == "ESCAPE") return SDLK_ESCAPE;
-  if (key == "R")      return SDLK_R;
-  if (key == "P")      return SDLK_P;
-  if (key == "F")      return SDLK_F;
-  return SDLK_UNKNOWN;
+  // SDL canonical name differs from our uppercase Lua name for these.
+  if (key == "SPACE")     return SDLK_SPACE;
+  if (key == "RETURN")    return SDLK_RETURN;
+  if (key == "ESCAPE")    return SDLK_ESCAPE;
+  if (key == "UP")        return SDLK_UP;
+  if (key == "DOWN")      return SDLK_DOWN;
+  if (key == "LEFT")      return SDLK_LEFT;
+  if (key == "RIGHT")     return SDLK_RIGHT;
+  if (key == "LSHIFT")    return SDLK_LSHIFT;
+  if (key == "RSHIFT")    return SDLK_RSHIFT;
+  if (key == "LCTRL")     return SDLK_LCTRL;
+  if (key == "RCTRL")     return SDLK_RCTRL;
+  if (key == "LALT")      return SDLK_LALT;
+  if (key == "RALT")      return SDLK_RALT;
+  if (key == "TAB")       return SDLK_TAB;
+  if (key == "BACKSPACE") return SDLK_BACKSPACE;
+  if (key == "DELETE")    return SDLK_DELETE;
+
+  // For letters, digits, F-keys, etc.: lowercase the name and ask SDL.
+  // SDL_GetKeyFromName("f") returns the same keycode SDL puts in KEY_DOWN
+  // for the F key, which is always correct regardless of SDL version.
+  std::string sdlName = key;
+  for (auto &c : sdlName)
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return SDL_GetKeyFromName(sdlName.c_str());
 }
 
 struct ScriptingEngine::Impl {
@@ -114,9 +133,6 @@ struct ScriptingEngine::Impl {
           if (auto *s = world->GetComponent<SpriteComponent>(e)) s->layer = layer;
         });
 
-    // -- Texture API ----------------------------------------------------------
-    // set_sprite_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
-    // See scripting/RawBinding.hpp for the full explanation.
     {
       lua_State *L = lua.lua_state();
       RegisterRaw(L, "world", "set_sprite_texture",
@@ -159,9 +175,7 @@ struct ScriptingEngine::Impl {
                 static_cast<Uint8>(r), static_cast<Uint8>(g),
                 static_cast<Uint8>(b), static_cast<Uint8>(a.value_or(255))};
         });
-    // -------------------------------------------------------------------------
 
-    // -- Animation API --------------------------------------------------------
     w.set_function("add_animation",
         [world](EntityId e, sol::table frames, float dur, sol::optional<bool> loop) {
           auto &anim = world->AddComponent<AnimationComponent>(e);
@@ -204,7 +218,6 @@ struct ScriptingEngine::Impl {
               }
           }
         });
-    // -------------------------------------------------------------------------
 
     w.set_function("add_tag",
         [world](EntityId e, const std::string &tag) {
@@ -291,8 +304,6 @@ struct ScriptingEngine::Impl {
   }
 
   void BindTextures(TextureManager *textures) {
-    // load_texture uses RegisterRaw because sol2 misdeduces SDL_Texture*.
-    // See scripting/RawBinding.hpp for the full explanation.
     lua_State *L = lua.lua_state();
     RegisterRaw(L, "engine", "load_texture",
       [](lua_State *L_) -> int {
@@ -307,6 +318,29 @@ struct ScriptingEngine::Impl {
       },
       static_cast<void *>(textures));
   }
+
+  void BindAudio(AudioManager *audio) {
+    // Extend the existing engine table — do NOT use create_named_table here,
+    // that would wipe all bindings set by BindEngine.
+    sol::table eng = lua["engine"];
+
+    eng.set_function("load_sfx",
+        [audio](const std::string &path) -> int { return audio->LoadSfx(path); });
+    eng.set_function("play_sfx",
+        [audio](int handle, sol::optional<float> vol) {
+          audio->PlaySfx(handle, vol.value_or(1.f));
+        });
+    eng.set_function("load_music",
+        [audio](const std::string &path) -> int { return audio->LoadMusic(path); });
+    eng.set_function("play_music",
+        [audio](int handle, sol::optional<bool> loop) {
+          audio->PlayMusic(handle, loop.value_or(true));
+        });
+    eng.set_function("pause_music",      [audio]() { audio->PauseMusic(); });
+    eng.set_function("resume_music",     [audio]() { audio->ResumeMusic(); });
+    eng.set_function("stop_music",       [audio]() { audio->StopMusic(); });
+    eng.set_function("set_music_volume", [audio](float v) { audio->SetMusicVolume(v); });
+  }
 };
 
 ScriptingEngine::ScriptingEngine() : m_impl(std::make_unique<Impl>()) {}
@@ -316,6 +350,7 @@ void ScriptingEngine::BindWorld(World *world)        { m_impl->BindWorld(world);
 void ScriptingEngine::BindInput(InputManager *input) { m_impl->BindEngine(input); }
 void ScriptingEngine::BindFonts(FontManager *)       { /* fonts accessed via FONT_PATH in TextSystem */ }
 void ScriptingEngine::BindTextures(TextureManager *textures) { m_impl->BindTextures(textures); }
+void ScriptingEngine::BindAudio(AudioManager *audio)         { m_impl->BindAudio(audio); }
 
 void ScriptingEngine::ResetOnUpdate() {
   m_impl->onUpdateFn = sol::function{};
