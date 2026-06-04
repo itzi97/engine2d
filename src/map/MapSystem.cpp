@@ -23,6 +23,7 @@ static const Tileset* FindTileset(const TiledMap& map, int gid) {
 }
 
 // Compute the source rect on the tileset image for a given GID.
+// Always uses the tileset's own tileW/tileH for the source sample size.
 static SDL_FRect GidToSrcRect(const Tileset& ts, int gid) {
     const int localId = gid - ts.firstGid;           // 0-based index in this tileset
     const int col     = localId % ts.columns;
@@ -55,14 +56,19 @@ SpawnResult MapSystem::Spawn(const TiledMap& map,
                 const EntityId e = world.CreateEntity();
 
                 // Position: top-left of this tile in world space
+                // Spacing uses map.tileW/H so tiles are placed on the map grid.
                 auto& t = world.AddComponent<TransformComponent>(e);
                 t.position = {
                     static_cast<float>(col * map.tileW),
                     static_cast<float>(row * map.tileH)
                 };
+                // Render size uses map.tileW/H (the desired display size),
+                // NOT ts->tileW/H (the source art size). This allows the art
+                // to be scaled up (e.g. 16px source rendered at 32px) without
+                // gaps or overlaps between tiles.
                 t.size = {
-                    static_cast<float>(ts->tileW),
-                    static_cast<float>(ts->tileH)
+                    static_cast<float>(map.tileW),
+                    static_cast<float>(map.tileH)
                 };
 
                 auto& s  = world.AddComponent<SpriteComponent>(e);
@@ -84,7 +90,7 @@ SpawnResult MapSystem::Spawn(const TiledMap& map,
             t.position = {obj.x, obj.y};
             t.size     = {obj.w, obj.h};
 
-            // Tag with the object type ("player", "block", "spawn", …)
+            // Tag with the object type ("player", "block", "spawn", ...)
             // Falls back to the object name if type is empty.
             auto& tag = world.AddComponent<TagComponent>(e);
             tag.tag   = obj.type.empty() ? obj.name : obj.type;
