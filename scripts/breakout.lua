@@ -1,8 +1,12 @@
 -- breakout.lua
--- Controls: LEFT / RIGHT arrows to move paddle. R to reset. ESCAPE to quit.
+-- Controls: LEFT/RIGHT arrows to move paddle. R to reset. ESCAPE to pause.
 
 engine.set_window_title("Breakout")
 engine.set_window_size(1280, 720)
+
+if not pause_menu then
+  dofile("scripts/pause_menu.lua")
+end
 
 local W, H   = 1280, 720
 local BALL_S = 16
@@ -14,7 +18,7 @@ local BRICK_OFFSET_X = 43
 local BRICK_OFFSET_Y = 60
 local PAD_SPEED      = 520
 
--- ── helpers ───────────────────────────────────────────────────────────────────────────
+-- ─── helpers ───────────────────────────────────────────────────────────────
 
 local function make_entity(x, y, w, h, r, g, b)
   local e = world.create_entity()
@@ -35,7 +39,7 @@ local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   end
 end
 
--- ── init (runs on first load and on every engine.load_scene(init)) ────────────
+-- ─── init ──────────────────────────────────────────────────────────────────
 
 local function init()
   local ball_entity   = make_entity(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
@@ -74,13 +78,16 @@ local function init()
   local game_over = false
   local won       = false
 
-  -- ── update ───────────────────────────────────────────────────────────────────
+  -- ─── update ──────────────────────────────────────────────────────────────
 
   engine.on_update(function(dt)
-    if engine.is_key_just_pressed("ESCAPE") then engine.quit() end
+    if engine.is_key_just_pressed("ESCAPE") then
+      engine.load_scene(function() pause_menu(init) end)
+      return
+    end
 
     if game_over or won then
-      if engine.is_key_pressed("R") then engine.load_scene(init) end
+      if engine.is_key_just_pressed("R") then engine.load_scene(init) end
       return
     end
 
