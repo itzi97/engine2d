@@ -6,6 +6,10 @@
 
 // Text rendered via SDL_ttf.
 // TextSystem owns the cached texture; Lua sets text/color and marks it dirty.
+//
+// Visibility: when visible == false the label is skipped by TextSystem.
+// Use world.set_visible(id, false) from Lua — no need to clear text or
+// move the entity off-screen.
 struct TextComponent : Component {
   std::string  text;
   int          fontSize{24};
@@ -18,6 +22,9 @@ struct TextComponent : Component {
   // TextSystem subtracts (anchorX*texW, anchorY*texH) from the draw position.
   float anchorX{0.f};
   float anchorY{0.f};
+
+  // Visibility — false = skipped by TextSystem entirely.
+  bool visible{true};
 
   // Cache managed by TextSystem — do not set from Lua.
   SDL_Texture *texture{nullptr};

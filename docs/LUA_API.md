@@ -98,7 +98,7 @@ world.add_animation(ship, {
 | `world.add_text(id, text, size, r, g, b)` | — | Add a `TextComponent`. Requires a `TransformComponent` for position. |
 | `world.set_text(id, text)` | — | Update the displayed string |
 | `world.set_text_color(id, r, g, b, a)` | — | Update the text colour (0–255 per channel) |
-| `world.measure_text(id)` | `w, h` | Return the pixel dimensions of the rendered text texture. Returns `0, 0` if the entity has no `TextComponent` or the texture hasn't been built yet (text is empty or first `Render` hasn't run). |
+| `world.measure_text(id)` | `w, h` | Return the pixel dimensions of the rendered text texture. Returns `0, 0` if the entity has no `TextComponent` or the texture hasn't been built yet. |
 | `world.set_text_anchor(id, ax, ay)` | — | Set the anchor point in normalised `[0, 1]` coordinates. The anchor defines which point on the text bounding box is placed at the entity's transform position. |
 
 **Anchor reference:**
@@ -113,11 +113,8 @@ world.add_animation(ship, {
 
 **Centring a label on screen** — preferred pattern:
 ```lua
--- One-time setup: anchor at centre, position at screen centre.
--- Works for any string length with no manual width calculation.
 world.set_text_anchor(label, 0.5, 0.5)
 world.set_position(label, W/2, H/2)
-
 -- Updating text later re-uses the same anchor — no repositioning needed.
 world.set_text(label, "GAME OVER")
 ```
@@ -133,6 +130,22 @@ world.set_position(score_label, W - tw - 8, 8)
 > call it immediately after `set_text` but before the next `Render` pass, it
 > will still reflect the *previous* string's dimensions. For most use cases
 > `set_text_anchor` is simpler and avoids this timing issue entirely.
+
+### Visibility
+
+| Function | Returns | Description |
+|---|---|---|
+| `world.set_visible(id, bool)` | — | Show (`true`) or hide (`false`) an entity. Works on any entity with a `SpriteComponent`, a `TextComponent`, or both. Hidden entities are skipped entirely by the render systems — no draw calls, no state change. Safe to call on any entity; silently no-ops if neither component is present. |
+
+```lua
+-- Hide a HUD panel without destroying it:
+world.set_visible(panel_bg, false)
+world.set_visible(panel_title, false)
+
+-- Show it again later — all state (text, position, color) is preserved:
+world.set_visible(panel_bg, true)
+world.set_visible(panel_title, true)
+```
 
 ### Tags
 
@@ -176,9 +189,99 @@ for name, obj in pairs(objects) do
         local r = tonumber(obj.properties["color_r"]) or 200
         local g = tonumber(obj.properties["color_g"]) or 200
         local b = tonumber(obj.properties["color_b"]) or 200
-        -- obj.entity already has TransformComponent + TagComponent from MapSystem
         world.add_sprite(obj.entity, r, g, b, 255)
     end
+end
+```
+
+---
+
+## `util.lua` helpers
+
+Load at the top of any game script with `dofile("scripts/util.lua")`.
+
+### `make_label(x, y, text, size, r, g, b) → id`
+
+Creates a text entity with a `TransformComponent` + `TextComponent` in one call.
+
+### `make_sprite(x, y, w, h, r, g, b [, a [, layer]]) → id`
+
+Creates a coloured rect entity with a `TransformComponent` + `SpriteComponent` in one call.
+
+### `make_panel(opts) → panel`
+
+Builds a UI panel with an optional background rect, a title, and N selectable menu items.
+All entities start **hidden** — call `panel:show()` to make them visible.
+
+**Options table:**
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `cx` | number | *(required)* | Horizontal centre of the panel |
+| `cy` | number | *(required)* | Vertical centre of the panel |
+| `w` | number | `320` | Background width in pixels |
+| `h` | number | `160` | Background height in pixels |
+| `bg_color` | `{r,g,b,a}` | `{20,20,20,200}` | Background fill colour |
+| `bg_layer` | number | `20` | Render layer for the background rect |
+| `title` | string | `""` | Panel title text (omit for no title) |
+| `title_size` | number | `32` | Font size for the title |
+| `title_color` | `{r,g,b}` | `{255,220,80}` | Title text colour |
+| `items` | array | `{}` | Array of `{ text, size, color }` tables |
+| `item_gap` | number | `38` | Vertical gap between items in pixels |
+| `sel_color` | `{r,g,b}` | `{255,220,80}` | Highlighted item colour |
+| `unsel_color` | `{r,g,b}` | `{180,180,180}` | Normal item colour |
+| `layer` | number | `30` | Render layer for all text entities |
+
+**Panel object methods:**
+
+| Method | Description |
+|---|---|
+| `panel:show([sel])` | Make all panel entities visible. Optionally highlight item `sel` (1-based). |
+| `panel:hide()` | Make all panel entities invisible. State (text, colour, position) is preserved. |
+| `panel:set_selected(i)` | Highlight item `i`, reset all others to `unsel_color`. |
+| `panel:set_item_text(i, s)` | Update the text string of item `i`. |
+| `panel:set_title(s)` | Update the title text. |
+
+```lua
+-- Build a settings menu:
+local menu = make_panel({
+  cx = W/2, cy = H/2,
+  w = 340, h = 200,
+  title = "SETTINGS",
+  items = {
+    { text = "Sound: ON"  },
+    { text = "Fullscreen" },
+    { text = "Back"       },
+  },
+})
+
+local sel = 1
+menu:show(sel)
+
+engine.on_update(function(dt)
+  if engine.is_key_just_pressed("DOWN") then
+    sel = (sel % 3) + 1
+    menu:set_selected(sel)
+  end
+  if engine.is_key_just_pressed("RETURN") then
+    if sel == 3 then menu:hide() end
+  end
+end)
+```
+
+### `make_pause_overlay(cx, top_y) → panel`
+
+Convenience wrapper around `make_panel` that builds the standard two-option pause menu
+(Resume / Main Menu) with a keyboard hint. Returns the same panel interface.
+
+```lua
+local pause = make_pause_overlay(W/2, H/2 - 80)
+pause:hide()   -- starts hidden
+
+-- In on_update:
+if engine.is_key_just_pressed("P") then
+  if paused then pause:hide() else pause:show(1) end
+  paused = not paused
 end
 ```
 
@@ -261,15 +364,17 @@ end)
 ## Full Example
 
 ```lua
-dofile("scripts/util.lua")   -- make_label, make_sprite, make_pause_overlay
+dofile("scripts/util.lua")
 
 engine.set_window_title("My Game")
 engine.set_window_size(1280, 720)
 
+local W, H = 1280, 720
+
 -- Load assets
-local tex       = engine.load_texture("assets/player.png")
-local sfx_jump  = engine.load_sfx("assets/audio/sfx/jump.ogg")
-local music     = engine.load_music("assets/audio/music/theme.ogg")
+local tex      = engine.load_texture("assets/player.png")
+local sfx_jump = engine.load_sfx("assets/audio/sfx/jump.ogg")
+local music    = engine.load_music("assets/audio/music/theme.ogg")
 engine.set_music_volume(0.6)
 engine.play_music(music)
 
@@ -280,10 +385,16 @@ world.set_sprite_texture(player, tex, 0, 0, 32, 32)
 world.add_tag(player, "player")
 world.set_layer(player, 1)
 
--- HUD label, pixel-perfect centred horizontally
+-- HUD label centred horizontally
 local title = make_label(0, 20, "MY GAME", 36, 255, 255, 255)
-world.set_text_anchor(title, 0.5, 0)   -- centre horizontally, top-aligned
-world.set_position(title, 640, 20)     -- x = screen centre
+world.set_text_anchor(title, 0.5, 0)
+world.set_position(title, W/2, 20)
+
+-- Pause menu built with make_panel
+local paused = false
+local pause_sel = 1
+local pause = make_pause_overlay(W/2, H/2 - 80)
+pause:hide()
 
 -- Environment from Tiled map
 local objects = world.load_tiled_map("assets/maps/level1.tmj")
@@ -294,8 +405,24 @@ for name, obj in pairs(objects) do
 end
 
 local score = 0
+local hud   = make_label(10, 8, "Score: 0", 22, 255, 255, 255)
 
 engine.on_update(function(dt)
+    if engine.is_key_just_pressed("P") then
+        paused = not paused
+        if paused then pause:show(pause_sel) else pause:hide() end
+    end
+
+    if paused then
+        if engine.is_key_just_pressed("UP")   then pause_sel = 1; pause:set_selected(1) end
+        if engine.is_key_just_pressed("DOWN") then pause_sel = 2; pause:set_selected(2) end
+        if engine.is_key_just_pressed("RETURN") then
+            if pause_sel == 1 then paused = false; pause:hide()
+            else engine.quit() end
+        end
+        return
+    end
+
     local speed = 150
     local vx, vy = 0, 0
     if engine.is_key_pressed("RIGHT") then vx =  speed end

@@ -20,6 +20,8 @@ static inline void RotatePoint(float px, float py,
 void RenderSystem::Render(World &world, SDL_Renderer *renderer) {
   // ForEachSorted visits sprites in ascending layer order.
   world.ForEachSorted<SpriteComponent>([&](EntityId entity, const SpriteComponent &s) {
+    if (!s.visible) return;  // hidden — skip entirely
+
     const auto *t = world.GetComponent<TransformComponent>(entity);
     if (!t) return;
 

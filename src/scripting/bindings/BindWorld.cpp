@@ -203,38 +203,31 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
           tc->dirty = true;
         }
       });
-  // Returns the pixel dimensions of the cached text texture.
-  // Returns 0,0 if the entity has no TextComponent or the texture hasn't been
-  // built yet (i.e. the text is still empty or the first Render hasn't run).
-  // Typical use: centre a label after calling set_text.
-  //
-  //   local w, h = world.measure_text(label)
-  //   world.set_position(label, W/2 - w/2, H/2 - h/2)
   w.set_function("measure_text",
       [world](EntityId e) -> std::tuple<int, int> {
         if (const auto *tc = world->GetComponent<TextComponent>(e))
           return {tc->texW, tc->texH};
         return {0, 0};
       });
-  // Set the anchor point for text positioning in normalised [0,1] coordinates.
-  // The anchor defines which point on the text bounding box is placed at the
-  // entity's transform position.
-  //
-  //   (0,   0  ) = top-left  (default, matches legacy behaviour)
-  //   (0.5, 0.5) = centre
-  //   (1,   0  ) = top-right
-  //   (0,   1  ) = bottom-left
-  //   (1,   1  ) = bottom-right
-  //
-  // Example — snap a label to horizontal centre of the screen:
-  //   world.set_text_anchor(label, 0.5, 0)
-  //   world.set_position(label, W/2, y)
   w.set_function("set_text_anchor",
       [world](EntityId e, float ax, float ay) {
         if (auto *tc = world->GetComponent<TextComponent>(e)) {
           tc->anchorX = ax;
           tc->anchorY = ay;
         }
+      });
+
+  // --- Visibility ---------------------------------------------------------
+  // Hides or shows an entity without destroying it or clearing its state.
+  // Works on any entity that has a SpriteComponent, a TextComponent, or both.
+  // Silently no-ops if the entity has neither (safe to call on any entity).
+  //
+  //   world.set_visible(id, false)  -- hide
+  //   world.set_visible(id, true)   -- show
+  w.set_function("set_visible",
+      [world](EntityId e, bool v) {
+        if (auto *s  = world->GetComponent<SpriteComponent>(e)) s->visible  = v;
+        if (auto *tc = world->GetComponent<TextComponent>(e))   tc->visible = v;
       });
 
   // --- Collision queries --------------------------------------------------
@@ -260,21 +253,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
       });
 
   // --- Tiled map loading --------------------------------------------------
-  // world.load_tiled_map(path) -> table
-  //
-  // Parses a Tiled JSON map, spawns all tile-layer entities automatically,
-  // and returns a table of object-layer entities for Lua to wire up:
-  //
-  //   local objects = world.load_tiled_map("assets/maps/level1.tmj")
-  //   local player  = objects["player"]       -- by object name
-  //   local spawns  = objects["spawn"]         -- first object with type "spawn"
-  //
-  // Each value in the table is a sub-table:
-  //   { entity, x, y, w, h, name, type, properties }
-  // where properties is a key→string table of all custom Tiled properties.
-  //
-  // Tile-layer entities are spawned silently (TransformComponent +
-  // SpriteComponent). You usually don't need to touch them from Lua.
   w.set_function("load_tiled_map",
       [&lua, world, textures](const std::string &path) -> sol::table {
         TiledMap map;
@@ -287,15 +265,11 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
 
         SpawnResult result = MapSystem::Spawn(map, *world, *textures);
 
-        // Build the return table keyed by object name (or "object_N" fallback).
-        // If multiple objects share the same name, later ones overwrite earlier
-        // ones — use unique names in Tiled for reliable lookup.
         auto tbl = lua.create_table();
         for (std::size_t i = 0; i < result.objectEntities.size(); ++i) {
             const EntityId  e   = result.objectEntities[i];
             const MapObject &mo = result.objects[i];
 
-            // Build the per-object sub-table
             auto obj = lua.create_table();
             obj["entity"] = e;
             obj["x"]      = mo.x;
@@ -310,7 +284,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
                 props[k] = v;
             obj["properties"] = props;
 
-            // Key by name, fall back to "object_N"
             const std::string key = mo.name.empty()
                 ? ("object_" + std::to_string(i + 1))
                 : mo.name;

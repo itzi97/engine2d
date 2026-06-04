@@ -10,6 +10,7 @@ void TextSystem::Render(World &world, SDL_Renderer *renderer,
                         FontManager &fonts, const std::string &defaultFont) {
   // ForEachSorted visits text components in ascending layer order.
   world.ForEachSorted<TextComponent>([&](EntityId entity, TextComponent &tc) {
+    if (!tc.visible)   return;  // hidden — skip entirely
     if (tc.text.empty()) return;
 
     if (tc.dirty) {
