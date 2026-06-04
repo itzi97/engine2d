@@ -1,18 +1,14 @@
--- breakout.lua
--- Controls: LEFT/RIGHT arrows to move paddle. R to reset. ESCAPE to pause.
+-- breakout.lua  (loaded at runtime via dofile from main_menu)
+-- Controls: LEFT/RIGHT to move. ESCAPE = pause/unpause. R = retry on game over.
 
 engine.set_window_title("Breakout")
 engine.set_window_size(1280, 720)
 
-if not pause_menu then
-  dofile("scripts/pause_menu.lua")
-end
-
-local W, H   = 1280, 720
-local BALL_S = 16
-local PAD_W, PAD_H     = 120, 14
-local BRICK_W, BRICK_H = 74, 24
-local BRICK_COLS, BRICK_ROWS = 14, 6
+local W, H           = 1280, 720
+local BALL_S         = 16
+local PAD_W, PAD_H   = 120, 14
+local BRICK_W, BRICK_H         = 74, 24
+local BRICK_COLS, BRICK_ROWS   = 14, 6
 local BRICK_PADDING  = 8
 local BRICK_OFFSET_X = 43
 local BRICK_OFFSET_Y = 60
@@ -39,16 +35,70 @@ local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   end
 end
 
--- ─── init ──────────────────────────────────────────────────────────────────
+-- ─── game over screen ───────────────────────────────────────────────────
 
-local function init()
-  local ball_entity   = make_entity(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
+local function game_over(score, won)
+  local cx   = W/2
+  local msg  = won and "YOU WIN!" or "GAME OVER"
+  local col  = won and {80, 220, 80} or {220, 60, 60}
+
+  local e1 = world.create_entity()
+  world.add_transform(e1, cx - 140, 260, 0, 0)
+  world.add_text(e1, msg, 56, col[1], col[2], col[3])
+
+  local e2 = world.create_entity()
+  world.add_transform(e2, cx - 80, 340, 0, 0)
+  world.add_text(e2, "Score: " .. score, 32, 255, 255, 255)
+
+  local e3 = world.create_entity()
+  world.add_transform(e3, cx - 200, 430, 0, 0)
+  world.add_text(e3, "R  retry     M  main menu", 26, 180, 180, 180)
+
+  engine.on_update(function(dt)
+    if engine.is_key_just_pressed("R") then
+      engine.load_scene(function() dofile("scripts/breakout.lua") end)
+    end
+    if engine.is_key_just_pressed("M") or engine.is_key_just_pressed("ESCAPE") then
+      engine.load_scene(function() dofile("scripts/main_menu.lua") end)
+    end
+  end)
+
+  log("breakout: game over, score=" .. score .. ", won=" .. tostring(won))
+end
+
+-- ─── start screen ──────────────────────────────────────────────────────────
+
+local function start_screen()
+  local cx = W/2
+  local e1 = world.create_entity()
+  world.add_transform(e1, cx - 110, 260, 0, 0)
+  world.add_text(e1, "BREAKOUT", 64, 80, 160, 255)
+
+  local e2 = world.create_entity()
+  world.add_transform(e2, cx - 160, 360, 0, 0)
+  world.add_text(e2, "ENTER to play   M for menu", 26, 180, 180, 180)
+
+  engine.on_update(function(dt)
+    if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
+      engine.load_scene(init)
+    end
+    if engine.is_key_just_pressed("M") or engine.is_key_just_pressed("ESCAPE") then
+      engine.load_scene(function() dofile("scripts/main_menu.lua") end)
+    end
+  end)
+
+  log("breakout: start screen")
+end
+
+-- ─── gameplay ────────────────────────────────────────────────────────────────
+
+function init()
+  local ball_entity      = make_entity(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
   local ball_vx, ball_vy = 260, -320
-
-  local paddle_entity = make_entity(W/2 - PAD_W/2, H - 48, PAD_W, PAD_H, 80, 160, 255)
+  local paddle_entity    = make_entity(W/2 - PAD_W/2, H - 48, PAD_W, PAD_H, 80, 160, 255)
   world.add_tag(paddle_entity, "paddle")
 
-  local bricks = {}
+  local bricks  = {}
   local colours = {
     {220, 50,  50 }, {220, 130, 50 }, {220, 220, 50 },
     {50,  220, 50 }, {50,  180, 220}, {130, 50,  220},
@@ -70,32 +120,30 @@ local function init()
   world.add_transform(score_entity, 10, 4, 0, 0)
   world.add_text(score_entity, "Score: 0", 22, 255, 255, 255)
 
-  local status_entity = world.create_entity()
-  world.add_transform(status_entity, W/2 - 160, H/2 - 20, 0, 0)
-  world.add_text(status_entity, "", 32, 255, 220, 80)
+  local pause_entity = world.create_entity()
+  world.add_transform(pause_entity, W/2 - 80, H/2 - 20, 0, 0)
+  world.add_text(pause_entity, "", 40, 255, 220, 80)
 
-  local score     = 0
-  local game_over = false
-  local won       = false
+  local score  = 0
+  local paused = false
+  local total_bricks = BRICK_COLS * BRICK_ROWS
 
-  -- ─── update ──────────────────────────────────────────────────────────────
-
+  -- ── update ───────────────────────────────────────────────────────────
   engine.on_update(function(dt)
     if engine.is_key_just_pressed("ESCAPE") then
-      engine.load_scene(function() pause_menu(init) end)
+      paused = not paused
+      world.set_text(pause_entity, paused and "PAUSED" or "")
       return
     end
+    if paused then return end
 
-    if game_over or won then
-      if engine.is_key_just_pressed("R") then engine.load_scene(init) end
-      return
-    end
-
+    -- paddle
     local px, py = world.get_position(paddle_entity)
     if engine.is_key_pressed("LEFT")  then px = math.max(0,       px - PAD_SPEED * dt) end
     if engine.is_key_pressed("RIGHT") then px = math.min(W-PAD_W, px + PAD_SPEED * dt) end
     world.set_position(paddle_entity, px, py)
 
+    -- ball movement
     local bx, by = world.get_position(ball_entity)
     bx = bx + ball_vx * dt
     by = by + ball_vy * dt
@@ -103,20 +151,21 @@ local function init()
     if bx <= 0            then bx = 0;        ball_vx =  math.abs(ball_vx) end
     if bx + BALL_S >= W   then bx = W-BALL_S; ball_vx = -math.abs(ball_vx) end
     if by <= 0            then by = 0;        ball_vy =  math.abs(ball_vy) end
+
     if by > H then
-      game_over = true
-      world.set_text(status_entity, "GAME OVER  -  press R")
       world.set_position(ball_entity, bx, by)
+      engine.load_scene(function() game_over(score, false) end)
       return
     end
 
     world.set_position(ball_entity, bx, by)
 
+    -- collisions
     local hits    = world.get_collisions_for(ball_entity)
     local bounced = false
-    local alive_count = 0
+    local alive_count = total_bricks
     for _, brick in ipairs(bricks) do
-      if brick.alive then alive_count = alive_count + 1 end
+      if not brick.alive then alive_count = alive_count - 1 end
     end
 
     for _, col in ipairs(hits) do
@@ -141,9 +190,9 @@ local function init()
               bounced = true
             end
             world.destroy_entity(brick.entity)
-            brick.alive = false
-            alive_count = alive_count - 1
-            score = score + 10
+            brick.alive  = false
+            alive_count  = alive_count - 1
+            score        = score + 10
             world.set_text(score_entity, "Score: " .. score)
             break
           end
@@ -152,12 +201,11 @@ local function init()
     end
 
     if alive_count == 0 then
-      won = true
-      world.set_text(status_entity, "YOU WIN!  -  press R")
+      engine.load_scene(function() game_over(score, true) end)
     end
   end)
 
-  log("breakout: scene loaded")
+  log("breakout: gameplay started")
 end
 
-init()
+start_screen()
