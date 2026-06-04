@@ -57,7 +57,6 @@ bool Game::Initialize() {
 
   m_scripting->BindWorld(m_world.get(), m_textures.get());
   m_scripting->BindInput(m_input.get(), m_window, m_renderer, m_scenes.get());
-  m_scripting->BindFonts(m_fonts.get());
   m_scripting->BindTextures(m_textures.get());
   m_scripting->BindAudio(m_audio.get());
 
@@ -97,7 +96,7 @@ void Game::Update(float dt) {
   if (auto scene = m_scripting->TakePendingScene()) {
     m_world->ClearAll();
     m_scripting->ResetOnUpdate();
-    scene();
+    (*scene)();  // dereference the optional before calling
   }
 }
 

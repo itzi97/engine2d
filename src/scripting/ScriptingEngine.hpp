@@ -5,7 +5,6 @@
 #include <string>
 
 class AudioManager;
-class FontManager;
 class InputManager;
 class SceneManager;
 class TextureManager;
@@ -21,12 +20,15 @@ public:
   void BindWorld   (World *world, TextureManager *textures);
   void BindInput   (InputManager *input, SDL_Window *window,
                     SDL_Renderer *renderer, SceneManager *scenes);
-  void BindFonts   (FontManager *fonts);
   void BindTextures(TextureManager *textures);
   void BindAudio   (AudioManager *audio);
 
+  // Run a Lua source string or a file on disk.
   bool RunString(const char *src, const char *chunkName);
   bool RunFile  (const std::string &path);
+
+  // Queue a C++ callable to run at the next scene-transition point.
+  void QueueScene(std::function<void()> fn);
 
   void CallOnUpdate(float dt);
   void ResetOnUpdate();

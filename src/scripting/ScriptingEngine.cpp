@@ -3,7 +3,6 @@
 
 #include "scripting/bindings/BindAudio.hpp"
 #include "scripting/bindings/BindEngine.hpp"
-#include "scripting/bindings/BindFonts.hpp"
 #include "scripting/bindings/BindTextures.hpp"
 #include "scripting/bindings/BindWorld.hpp"
 
@@ -28,11 +27,7 @@ void ScriptingEngine::BindInput(InputManager *input, SDL_Window *window,
                                 SDL_Renderer *renderer, SceneManager *scenes) {
   BindEngine(m_lua, input, window, renderer,
              m_onUpdate, m_pendingScene, scenes,
-             nullptr /* world set later via BindWorld */);
-}
-
-void ScriptingEngine::BindFonts(FontManager *fonts) {
-  BindFontsLua(m_lua, fonts);
+             nullptr /* world — not needed for input/engine bindings */);
 }
 
 void ScriptingEngine::BindTextures(TextureManager *textures) {
@@ -63,6 +58,10 @@ bool ScriptingEngine::RunFile(const std::string &path) {
   std::ostringstream ss;
   ss << f.rdbuf();
   return RunString(ss.str().c_str(), path.c_str());
+}
+
+void ScriptingEngine::QueueScene(std::function<void()> fn) {
+  m_pendingScene = std::move(fn);
 }
 
 void ScriptingEngine::CallOnUpdate(float dt) {
