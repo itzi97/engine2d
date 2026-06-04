@@ -21,7 +21,7 @@ local LEVELS = {
   { name = "Neon",    map = "assets/maps/level2.tmj", label_col = {60,  200, 180} },
 }
 
--- ─── AABB side detection ─────────────────────────────────────────────────────
+-- ─── AABB side detection ──────────────────────────────────────────────────────────────────────────────
 
 local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   local ol  = (ax + aw) - bx
@@ -35,7 +35,7 @@ local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   end
 end
 
--- ─── game over screen ────────────────────────────────────────────────────────
+-- ─── game over screen ────────────────────────────────────────────────────────────────────────────
 
 local function game_over(score, won)
   local cx  = W / 2
@@ -54,11 +54,9 @@ local function game_over(score, won)
       engine.load_scene(function() dofile("scripts/main_menu.lua") end)
     end
   end)
-
-  log("breakout: game over, score=" .. score .. ", won=" .. tostring(won))
 end
 
--- ─── level select ────────────────────────────────────────────────────────────
+-- ─── level select ──────────────────────────────────────────────────────────────────────────────
 
 local chosen_level = 1
 
@@ -112,11 +110,9 @@ local function level_select()
       engine.load_scene(function() dofile("scripts/main_menu.lua") end)
     end
   end)
-
-  log("breakout: level select")
 end
 
--- ─── start screen ────────────────────────────────────────────────────────────
+-- ─── start screen ──────────────────────────────────────────────────────────────────────────────
 
 function start_screen()
   local cx = W / 2
@@ -140,17 +136,14 @@ function start_screen()
       engine.load_scene(function() dofile("scripts/main_menu.lua") end)
     end
   end)
-
-  log("breakout: start screen, level=" .. lv.name)
 end
 
--- ─── gameplay ────────────────────────────────────────────────────────────────
+-- ─── gameplay ────────────────────────────────────────────────────────────────────────────────────
 
 function init()
   local lv = LEVELS[chosen_level]
 
   local map_objects = world.load_tiled_map(lv.map)
-  log("breakout: loaded map " .. lv.map)
 
   local bricks = {}
   for _, obj in pairs(map_objects) do
@@ -165,7 +158,6 @@ function init()
   end
 
   local total_bricks = #bricks
-  log("breakout: spawned " .. total_bricks .. " bricks from map")
 
   local ball_entity      = make_sprite(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
   local ball_vx, ball_vy = 260, -320
@@ -178,27 +170,27 @@ function init()
   local pause_sel    = 1
 
   local overlay = make_pause_overlay(W / 2, H / 2 - 90)
-  overlay.hide()
+  overlay:hide()
 
   engine.on_update(function(dt)
     if engine.is_key_just_pressed("ESCAPE") then
       paused = not paused
-      if paused then pause_sel = 1; overlay.show(pause_sel)
-      else overlay.hide() end
+      if paused then pause_sel = 1; overlay:show(pause_sel)
+      else overlay:hide() end
       return
     end
 
     if paused then
       if engine.is_key_just_pressed("UP") or engine.is_key_just_pressed("DOWN") then
         pause_sel = (pause_sel == 1) and 2 or 1
-        overlay.show(pause_sel)
+        overlay:show(pause_sel)
       end
-      if engine.is_key_just_pressed("R") then paused = false; overlay.hide(); return end
+      if engine.is_key_just_pressed("R") then paused = false; overlay:hide(); return end
       if engine.is_key_just_pressed("M") then
         engine.load_scene(function() dofile("scripts/main_menu.lua") end); return
       end
       if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
-        if pause_sel == 1 then paused = false; overlay.hide()
+        if pause_sel == 1 then paused = false; overlay:hide()
         else engine.load_scene(function() dofile("scripts/main_menu.lua") end) end
       end
       return
@@ -268,8 +260,6 @@ function init()
       engine.load_scene(function() game_over(score, true) end)
     end
   end)
-
-  log("breakout: gameplay started, level=" .. lv.name)
 end
 
 level_select()

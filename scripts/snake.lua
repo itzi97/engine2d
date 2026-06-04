@@ -12,7 +12,7 @@ local COLS = 40
 local ROWS = 22
 local STEP = 1 / 10
 
--- ─── helpers ─────────────────────────────────────────────────────────────────
+-- ─── helpers ─────────────────────────────────────────────────────────────────────────────────────
 
 local function make_segment(x, y, r, g, b)
   return make_sprite(x, y, CELL, CELL, r, g, b)
@@ -32,7 +32,7 @@ local function spawn_food(snake_body)
   return x, y
 end
 
--- ─── game over screen ────────────────────────────────────────────────────────
+-- ─── game over screen ────────────────────────────────────────────────────────────────────────────
 
 local function game_over(score)
   local cx = W / 2
@@ -48,11 +48,9 @@ local function game_over(score)
       engine.load_scene(function() dofile("scripts/main_menu.lua") end)
     end
   end)
-
-  log("snake: game over, score=" .. score)
 end
 
--- ─── start screen ────────────────────────────────────────────────────────────
+-- ─── start screen ──────────────────────────────────────────────────────────────────────────────
 
 local function start_screen()
   local cx = W / 2
@@ -67,11 +65,9 @@ local function start_screen()
       engine.load_scene(function() dofile("scripts/main_menu.lua") end)
     end
   end)
-
-  log("snake: start screen")
 end
 
--- ─── gameplay ────────────────────────────────────────────────────────────────
+-- ─── gameplay ────────────────────────────────────────────────────────────────────────────────────
 
 function init()
   math.randomseed(os.time and os.time() or 12345)
@@ -94,7 +90,7 @@ function init()
   local score_entity = make_label(10, 4, "Length: 1", 22, 255, 255, 255)
 
   local overlay = make_pause_overlay(W / 2, 270)
-  overlay.hide()
+  overlay:hide()
 
   local function snake_step()
     dir = next_dir
@@ -132,22 +128,22 @@ function init()
   engine.on_update(function(dt)
     if engine.is_key_just_pressed("ESCAPE") then
       paused = not paused
-      if paused then pause_sel = 1; overlay.show(pause_sel)
-      else overlay.hide() end
+      if paused then pause_sel = 1; overlay:show(pause_sel)
+      else overlay:hide() end
       return
     end
 
     if paused then
       if engine.is_key_just_pressed("UP") or engine.is_key_just_pressed("DOWN") then
         pause_sel = (pause_sel == 1) and 2 or 1
-        overlay.show(pause_sel)
+        overlay:show(pause_sel)
       end
-      if engine.is_key_just_pressed("R") then paused = false; overlay.hide(); return end
+      if engine.is_key_just_pressed("R") then paused = false; overlay:hide(); return end
       if engine.is_key_just_pressed("M") then
         engine.load_scene(function() dofile("scripts/main_menu.lua") end); return
       end
       if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
-        if pause_sel == 1 then paused = false; overlay.hide()
+        if pause_sel == 1 then paused = false; overlay:hide()
         else engine.load_scene(function() dofile("scripts/main_menu.lua") end) end
       end
       return
@@ -164,8 +160,6 @@ function init()
       accumulator = accumulator - STEP
     end
   end)
-
-  log("snake: gameplay started")
 end
 
 start_screen()
