@@ -242,8 +242,8 @@ local pause_sel = 1
 
 local function toggle_pause()
   paused = not paused
-  if paused then pause_sel = 1; pause_ui.show(pause_sel)
-  else pause_ui.hide() end
+  if paused then pause_sel = 1; pause_ui:show(pause_sel)
+  else pause_ui:hide() end
 end
 
 -- ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ local function init()
 
   build_hud()
   pause_ui = make_pause_overlay(W/2, H/2 - 80)
-  pause_ui.hide()
+  pause_ui:hide()
 
   load_wave(wave)
 end
@@ -276,8 +276,8 @@ engine.on_update(function(dt)
   end
 
   if paused then
-    if engine.is_key_just_pressed("UP")   then pause_sel = 1; pause_ui.show(pause_sel) end
-    if engine.is_key_just_pressed("DOWN") then pause_sel = 2; pause_ui.show(pause_sel) end
+    if engine.is_key_just_pressed("UP")   then pause_sel = 1; pause_ui:show(pause_sel) end
+    if engine.is_key_just_pressed("DOWN") then pause_sel = 2; pause_ui:show(pause_sel) end
     if engine.is_key_just_pressed("RETURN")
     or (pause_sel == 1 and engine.is_key_just_pressed("R"))
     or (pause_sel == 2 and engine.is_key_just_pressed("M")) then
