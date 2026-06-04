@@ -16,6 +16,10 @@ Game::Game()  = default;
 Game::~Game() = default;
 
 bool Game::Initialize() {
+  // Tell SDL to bypass WM focus-stealing prevention so the window
+  // gets keyboard focus immediately without a manual click.
+  SDL_SetHint(SDL_HINT_FORCE_RAISEWINDOW, "1");
+
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
     SDL_Log("SDL_Init failed: %s", SDL_GetError());
     return false;
@@ -27,7 +31,6 @@ bool Game::Initialize() {
     return false;
   }
 
-  // Request keyboard focus — without this some WMs don't deliver key events.
   SDL_RaiseWindow(m_window);
 
   m_renderer = SDL_CreateRenderer(m_window, nullptr);
