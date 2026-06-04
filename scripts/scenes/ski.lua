@@ -18,12 +18,10 @@ local PIN_X = VIEW_W * 0.5 - TILE * 0.5
 local PIN_Y = VIEW_H * 0.3
 
 -- Atlas frames (row 5 of the Kenney Tiny Ski sheet, 0-indexed tiles)
--- col 10 = straight idle
--- col 11 = leaning/steering
--- col 12 = poles pushed back (speed burst)
 local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
 local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
-local FRAME_PUSH  = { x = 12*TILE, y = 5*TILE, w = TILE, h = TILE }
+-- FRAME_PUSH is the same sprite as FRAME_STEER (leaning pose doubles as push)
+local FRAME_PUSH  = FRAME_STEER
 
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
 
@@ -49,7 +47,6 @@ world.add_tag(player, "player")
 
 engine.set_camera(spawn_x - PIN_X, spawn_y - PIN_Y)
 
--- Track last frame shown so we only call set_sprite_src when it changes.
 local last_frame = FRAME_IDLE
 
 local function set_frame(f)
@@ -62,9 +59,8 @@ end
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
-  -- ── Gear shifting (one tap = one step) ─────────────────────────────────
-  local pushing = engine.is_key_pressed("down")   -- held = show push anim
-  local braking = engine.is_key_pressed("up")
+  -- ── Gear shifting ──────────────────────────────────────────────────────────
+  local pushing = engine.is_key_pressed("down")
 
   if engine.is_key_just_pressed("up") then
     gear_idx = math.max(1, gear_idx - 1)
@@ -87,16 +83,13 @@ engine.on_update(function(dt)
   world.set_velocity(player, vx, vy)
 
   -- ── Sprite selection ─────────────────────────────────────────────────────
-  -- Priority: pushing (down held) > steering (left/right) > idle
-  if pushing then
-    set_frame(FRAME_PUSH)
-  elseif left or right then
+  -- pushing (down held) and steering share the same leaning frame
+  if pushing or left or right then
     set_frame(FRAME_STEER)
   else
     set_frame(FRAME_IDLE)
   end
 
-  -- Horizontal flip for left turns
   if vx < 0 then
     world.set_sprite_flip(player, true, false)
   elseif vx > 0 then
