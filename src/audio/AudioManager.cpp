@@ -112,13 +112,11 @@ void AudioManager::PlaySfx(int handle, float volume) {
   SDL_AudioStream *stream = SDL_CreateAudioStream(&src, &m_spec);
   if (!stream) return;
 
-  // Scale volume on a copy so the stored clip is unchanged.
-  std::vector<float> buf = clip.samples;
-  const float v = std::clamp(volume, 0.f, 1.f);
-  for (auto &s : buf) s *= v;
+  // Apply volume via SDL gain — no copy of the sample buffer needed.
+  SDL_SetAudioStreamGain(stream, std::clamp(volume, 0.f, 1.f));
 
-  SDL_PutAudioStreamData(stream, buf.data(),
-      static_cast<int>(buf.size() * sizeof(float)));
+  SDL_PutAudioStreamData(stream, clip.samples.data(),
+      static_cast<int>(clip.samples.size() * sizeof(float)));
   SDL_FlushAudioStream(stream);
   SDL_BindAudioStream(m_deviceId, stream);
 
