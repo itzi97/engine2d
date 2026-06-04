@@ -1,5 +1,7 @@
--- main_menu.lua  (embed with -DGAME=main_menu)
--- Shared entry point. UP/DOWN to navigate, ENTER to launch.
+-- main_menu.lua  (loaded at startup)
+-- UP/DOWN to navigate, ENTER to launch.
+
+dofile("scripts/util.lua")
 
 engine.set_window_title("engine2d")
 engine.set_window_size(1280, 720)
@@ -8,26 +10,17 @@ local W, H = 1280, 720
 
 local games = {
   { label = "Snake",   file = "scripts/snake.lua"    },
-  { label = "Breakout",file = "scripts/breakout.lua" },
+  { label = "Breakout", file = "scripts/breakout.lua" },
 }
 local selected = 1
 
--- Title
-local title_e = world.create_entity()
-world.add_transform(title_e, W/2 - 100, H/2 - 160, 0, 0)
-world.add_text(title_e, "engine2d", 64, 255, 255, 255)
+make_label(W/2 - 100, H/2 - 160, "engine2d",      64, 255, 255, 255)
+make_label(W/2 - 140, H/2 -  70, "select a game", 24, 160, 160, 160)
+make_label(W/2 - 160, H   -  60, "UP / DOWN to navigate   ENTER to play", 18, 100, 100, 100)
 
--- Subtitle
-local sub_e = world.create_entity()
-world.add_transform(sub_e, W/2 - 140, H/2 - 70, 0, 0)
-world.add_text(sub_e, "select a game", 24, 160, 160, 160)
-
--- Game option entities
 local option_entities = {}
 for i, g in ipairs(games) do
-  local e = world.create_entity()
-  world.add_transform(e, W/2 - 80, H/2 + (i - 1) * 60, 0, 0)
-  world.add_text(e, g.label, 40, 180, 180, 180)
+  local e = make_label(W/2 - 80, H/2 + (i - 1) * 60, g.label, 40, 180, 180, 180)
   table.insert(option_entities, e)
 end
 
@@ -43,11 +36,6 @@ end
 
 refresh()
 
--- Hint
-local hint_e = world.create_entity()
-world.add_transform(hint_e, W/2 - 160, H - 60, 0, 0)
-world.add_text(hint_e, "UP / DOWN to navigate   ENTER to play", 18, 100, 100, 100)
-
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("DOWN") then
     selected = selected % #games + 1
@@ -59,9 +47,7 @@ engine.on_update(function(dt)
   end
   if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
     local path = games[selected].file
-    engine.load_scene(function()
-      dofile(path)
-    end)
+    engine.load_scene(function() dofile(path) end)
   end
   if engine.is_key_just_pressed("ESCAPE") then
     engine.quit()
