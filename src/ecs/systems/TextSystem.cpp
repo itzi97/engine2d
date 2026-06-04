@@ -39,6 +39,10 @@ void TextSystem::Render(World &world, SDL_Renderer *renderer,
       y = t->position.y;
     }
 
+    // Apply anchor offset: anchor (0,0) = top-left, (0.5,0.5) = centre, etc.
+    x -= tc.anchorX * static_cast<float>(tc.texW);
+    y -= tc.anchorY * static_cast<float>(tc.texH);
+
     const SDL_FRect dst{x, y,
                         static_cast<float>(tc.texW),
                         static_cast<float>(tc.texH)};

@@ -98,6 +98,41 @@ world.add_animation(ship, {
 | `world.add_text(id, text, size, r, g, b)` | — | Add a `TextComponent`. Requires a `TransformComponent` for position. |
 | `world.set_text(id, text)` | — | Update the displayed string |
 | `world.set_text_color(id, r, g, b, a)` | — | Update the text colour (0–255 per channel) |
+| `world.measure_text(id)` | `w, h` | Return the pixel dimensions of the rendered text texture. Returns `0, 0` if the entity has no `TextComponent` or the texture hasn't been built yet (text is empty or first `Render` hasn't run). |
+| `world.set_text_anchor(id, ax, ay)` | — | Set the anchor point in normalised `[0, 1]` coordinates. The anchor defines which point on the text bounding box is placed at the entity's transform position. |
+
+**Anchor reference:**
+
+| `ax, ay` | Meaning |
+|---|---|
+| `0, 0` | Top-left *(default, legacy behaviour)* |
+| `0.5, 0.5` | Centre |
+| `1, 0` | Top-right |
+| `0, 1` | Bottom-left |
+| `1, 1` | Bottom-right |
+
+**Centring a label on screen** — preferred pattern:
+```lua
+-- One-time setup: anchor at centre, position at screen centre.
+-- Works for any string length with no manual width calculation.
+world.set_text_anchor(label, 0.5, 0.5)
+world.set_position(label, W/2, H/2)
+
+-- Updating text later re-uses the same anchor — no repositioning needed.
+world.set_text(label, "GAME OVER")
+```
+
+**Using `measure_text` for manual layout:**
+```lua
+-- Right-align a score label 8px from the right edge.
+local tw, _ = world.measure_text(score_label)
+world.set_position(score_label, W - tw - 8, 8)
+```
+
+> **Note:** `measure_text` returns the size of the *cached* texture. If you
+> call it immediately after `set_text` but before the next `Render` pass, it
+> will still reflect the *previous* string's dimensions. For most use cases
+> `set_text_anchor` is simpler and avoids this timing issue entirely.
 
 ### Tags
 
@@ -245,8 +280,10 @@ world.set_sprite_texture(player, tex, 0, 0, 32, 32)
 world.add_tag(player, "player")
 world.set_layer(player, 1)
 
--- HUD
-local hud = make_label(10, 4, "Score: 0", 22, 255, 255, 255)
+-- HUD label, pixel-perfect centred horizontally
+local title = make_label(0, 20, "MY GAME", 36, 255, 255, 255)
+world.set_text_anchor(title, 0.5, 0)   -- centre horizontally, top-aligned
+world.set_position(title, 640, 20)     -- x = screen centre
 
 -- Environment from Tiled map
 local objects = world.load_tiled_map("assets/maps/level1.tmj")

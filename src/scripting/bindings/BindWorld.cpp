@@ -203,6 +203,39 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures) {
           tc->dirty = true;
         }
       });
+  // Returns the pixel dimensions of the cached text texture.
+  // Returns 0,0 if the entity has no TextComponent or the texture hasn't been
+  // built yet (i.e. the text is still empty or the first Render hasn't run).
+  // Typical use: centre a label after calling set_text.
+  //
+  //   local w, h = world.measure_text(label)
+  //   world.set_position(label, W/2 - w/2, H/2 - h/2)
+  w.set_function("measure_text",
+      [world](EntityId e) -> std::tuple<int, int> {
+        if (const auto *tc = world->GetComponent<TextComponent>(e))
+          return {tc->texW, tc->texH};
+        return {0, 0};
+      });
+  // Set the anchor point for text positioning in normalised [0,1] coordinates.
+  // The anchor defines which point on the text bounding box is placed at the
+  // entity's transform position.
+  //
+  //   (0,   0  ) = top-left  (default, matches legacy behaviour)
+  //   (0.5, 0.5) = centre
+  //   (1,   0  ) = top-right
+  //   (0,   1  ) = bottom-left
+  //   (1,   1  ) = bottom-right
+  //
+  // Example — snap a label to horizontal centre of the screen:
+  //   world.set_text_anchor(label, 0.5, 0)
+  //   world.set_position(label, W/2, y)
+  w.set_function("set_text_anchor",
+      [world](EntityId e, float ax, float ay) {
+        if (auto *tc = world->GetComponent<TextComponent>(e)) {
+          tc->anchorX = ax;
+          tc->anchorY = ay;
+        }
+      });
 
   // --- Collision queries --------------------------------------------------
   w.set_function("get_collisions_for",

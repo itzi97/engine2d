@@ -87,22 +87,21 @@ local function wrap(x, y)
   return x, y
 end
 
--- Approximate pixel width: ~10 px per char at size 28, ~7 px per char at size 18
-local function approx_x(text, size)
-  local cw = size * 0.55
-  return math.floor(W/2 - (#text * cw) / 2)
+-- Centre an overlay label at a given screen position.
+-- Uses the anchor API so text is always pixel-perfect regardless of string length.
+local function overlay_centre(entity, cx, cy)
+  world.set_text_anchor(entity, 0.5, 0.5)
+  world.set_position(entity, cx, cy)
 end
 
 local function overlay_show(msg, sub, mr, mg, mb, sr, sg, sb)
-  local mx = approx_x(msg, 28)
-  world.set_position(hud_overlay, mx, H/2 - 28)
   world.set_text(hud_overlay, msg)
   world.set_text_color(hud_overlay, mr or 255, mg or 255, mb or 255, 255)
+  overlay_centre(hud_overlay, W/2, H/2 - 22)
 
-  local sx = approx_x(sub, 18)
-  world.set_position(hud_overlay_sub, sx, H/2 + 12)
   world.set_text(hud_overlay_sub, sub)
   world.set_text_color(hud_overlay_sub, sr or 200, sg or 200, sb or 200, 255)
+  overlay_centre(hud_overlay_sub, W/2, H/2 + 22)
 end
 
 local function overlay_hide()
@@ -148,7 +147,7 @@ local function spawn_asteroid(x, y, size, speed_mul)
     vx        = math.cos(angle) * spd,
     vy        = math.sin(angle) * spd,
     rot_speed = spin_dir * spin_mag,
-    rot       = math.random() * 360,   -- random starting angle too
+    rot       = math.random() * 360,
     size      = size,
   }
 end
@@ -229,7 +228,7 @@ local function build_hud()
   hud_score       = make_label(10,      8,  "SCORE  0",  18, 255, 255, 255)
   hud_lives       = make_label(10,      34, "LIVES ||||", 18, 255, 220,  80)
   hud_wave        = make_label(W-140,   8,  "WAVE 1 / " .. #MAP_WAVE, 18, 180, 220, 255)
-  -- Overlay labels start empty; overlay_show positions them dynamically
+  -- Overlay labels start empty; overlay_show centres them via set_text_anchor
   hud_overlay     = make_label(0, 0, "", 28, 255, 255, 255)
   hud_overlay_sub = make_label(0, 0, "", 18, 200, 200, 200)
   for _, e in ipairs({hud_score, hud_lives, hud_wave, hud_overlay, hud_overlay_sub}) do
