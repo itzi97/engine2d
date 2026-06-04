@@ -62,8 +62,8 @@ local fire_cd    = 0
 -- Asteroids are still manually advanced (no KinematicComponent) so we can
 -- spin them independently of their linear motion.
 local asteroids  = {}   -- { id, vx, vy, rot_speed, rot, size }
--- Bullets now have a KinematicComponent via set_velocity so PhysicsSystem
--- integrates them; we only track life here.
+-- Bullets have a KinematicComponent so PhysicsSystem integrates them;
+-- we only track life here.
 local bullets    = {}   -- { id, life }
 local explosions = {}   -- { id, timer }
 
@@ -138,6 +138,7 @@ local function spawn_player(x, y)
     world.add_animation(player, SHIP_FRAMES, 0.12)
   end
   world.add_tag(player, "player")
+  world.add_kinematic(player)          -- must come before set_velocity
   world.set_velocity(player, 0, 0)
   invuln  = INVULN_TIME
   fire_cd = 0
@@ -323,6 +324,7 @@ engine.on_update(function(dt)
       local pvx, pvy = world.get_velocity(player)
       local bvx = math.cos(rad) * BULLET_SPEED + pvx
       local bvy = math.sin(rad) * BULLET_SPEED + pvy
+      world.add_kinematic(b)             -- must come before set_velocity
       world.set_velocity(b, bvx, bvy)
       bullets[#bullets + 1] = { id = b, life = BULLET_LIFE }
       if sfx_laser ~= -1 then engine.play_sfx(sfx_laser, 0.8) end
