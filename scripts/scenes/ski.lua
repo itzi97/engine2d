@@ -75,7 +75,13 @@ engine.on_update(function(dt)
   end
 
   local px, py = world.get_position(player)
-  engine.set_camera(px - PIN_X, py - PIN_Y)
+  local cx, cy = px - PIN_X, py - PIN_Y
+  engine.set_camera(cx, cy)
+
+  -- DEBUG: show world pos and camera in title bar
+  engine.set_window_title(string.format(
+    "Tiny Ski  |  world=(%.0f,%.0f)  cam=(%.0f,%.0f)",
+    px, py, cx, cy))
 
   local pw, ph = TILE, TILE
   local function solid(wx, wy)
