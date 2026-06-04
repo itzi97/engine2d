@@ -20,41 +20,42 @@
 #include "rendering/TextureManager.hpp"
 
 #include <SDL3/SDL.h>
+#include <cctype>
 #include <iostream>
 
-// Map engine-facing uppercase key names to SDL keycodes.
-// Single letters and most named keys are forwarded to SDL_GetKeyFromName
-// using the SDL canonical lowercase/titlecase name so we always match
-// exactly what SDL3 puts in SDL_KeyboardEvent.key.
+// Converts an engine-facing uppercase key name (e.g. "SPACE", "F", "UP") to
+// the SDL keycode that SDL_KeyboardEvent.key will carry for that physical key.
+//
+// Special cases are keys whose Lua-facing name differs from SDL's canonical
+// name (the string SDL_GetKeyFromName expects). Everything else is lowercased
+// and forwarded to SDL_GetKeyFromName so the mapping is always in sync with
+// the runtime SDL build, regardless of keyboard layout.
 static SDL_Keycode KeycodeFromString(const std::string &key) {
-  // Special cases where the Lua name differs from the SDL canonical name.
-  if (key == "SPACE")  return SDLK_SPACE;
-  if (key == "RETURN") return SDLK_RETURN;
-  if (key == "ESCAPE") return SDLK_ESCAPE;
-  if (key == "UP")     return SDLK_UP;
-  if (key == "DOWN")   return SDLK_DOWN;
-  if (key == "LEFT")   return SDLK_LEFT;
-  if (key == "RIGHT")  return SDLK_RIGHT;
-  if (key == "LSHIFT") return SDLK_LSHIFT;
-  if (key == "RSHIFT") return SDLK_RSHIFT;
-  if (key == "LCTRL")  return SDLK_LCTRL;
-  if (key == "RCTRL")  return SDLK_RCTRL;
-  if (key == "LALT")   return SDLK_LALT;
-  if (key == "RALT")   return SDLK_RALT;
-  if (key == "TAB")    return SDLK_TAB;
+  // SDL canonical name differs from our uppercase Lua name for these.
+  if (key == "SPACE")     return SDLK_SPACE;
+  if (key == "RETURN")    return SDLK_RETURN;
+  if (key == "ESCAPE")    return SDLK_ESCAPE;
+  if (key == "UP")        return SDLK_UP;
+  if (key == "DOWN")      return SDLK_DOWN;
+  if (key == "LEFT")      return SDLK_LEFT;
+  if (key == "RIGHT")     return SDLK_RIGHT;
+  if (key == "LSHIFT")    return SDLK_LSHIFT;
+  if (key == "RSHIFT")    return SDLK_RSHIFT;
+  if (key == "LCTRL")     return SDLK_LCTRL;
+  if (key == "RCTRL")     return SDLK_RCTRL;
+  if (key == "LALT")      return SDLK_LALT;
+  if (key == "RALT")      return SDLK_RALT;
+  if (key == "TAB")       return SDLK_TAB;
   if (key == "BACKSPACE") return SDLK_BACKSPACE;
-  if (key == "DELETE") return SDLK_DELETE;
+  if (key == "DELETE")    return SDLK_DELETE;
 
-  // For everything else (single letters, digits, F-keys, etc.) convert our
-  // uppercase Lua name to the SDL canonical lowercase name and ask SDL.
-  // SDL_GetKeyFromName("f") returns the same keycode SDL reports for the F key.
+  // For letters, digits, F-keys, etc.: lowercase the name and ask SDL.
+  // SDL_GetKeyFromName("f") returns the same keycode SDL puts in KEY_DOWN
+  // for the F key, which is always correct regardless of SDL version.
   std::string sdlName = key;
-  for (auto &c : sdlName) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
-  SDL_Keycode kc = SDL_GetKeyFromName(sdlName.c_str());
-  if (kc != SDLK_UNKNOWN) return kc;
-
-  // Last resort: try the name as-is (handles SDL canonical names passed directly).
-  return SDL_GetKeyFromName(key.c_str());
+  for (auto &c : sdlName)
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return SDL_GetKeyFromName(sdlName.c_str());
 }
 
 struct ScriptingEngine::Impl {
@@ -319,29 +320,26 @@ struct ScriptingEngine::Impl {
   }
 
   void BindAudio(AudioManager *audio) {
+    // Extend the existing engine table — do NOT use create_named_table here,
+    // that would wipe all bindings set by BindEngine.
     sol::table eng = lua["engine"];
 
     eng.set_function("load_sfx",
-        [audio](const std::string &path) -> int {
-          return audio->LoadSfx(path);
-        });
+        [audio](const std::string &path) -> int { return audio->LoadSfx(path); });
     eng.set_function("play_sfx",
         [audio](int handle, sol::optional<float> vol) {
           audio->PlaySfx(handle, vol.value_or(1.f));
         });
     eng.set_function("load_music",
-        [audio](const std::string &path) -> int {
-          return audio->LoadMusic(path);
-        });
+        [audio](const std::string &path) -> int { return audio->LoadMusic(path); });
     eng.set_function("play_music",
         [audio](int handle, sol::optional<bool> loop) {
           audio->PlayMusic(handle, loop.value_or(true));
         });
-    eng.set_function("pause_music",  [audio]() { audio->PauseMusic(); });
-    eng.set_function("resume_music", [audio]() { audio->ResumeMusic(); });
-    eng.set_function("stop_music",   [audio]() { audio->StopMusic(); });
-    eng.set_function("set_music_volume",
-        [audio](float v) { audio->SetMusicVolume(v); });
+    eng.set_function("pause_music",      [audio]() { audio->PauseMusic(); });
+    eng.set_function("resume_music",     [audio]() { audio->ResumeMusic(); });
+    eng.set_function("stop_music",       [audio]() { audio->StopMusic(); });
+    eng.set_function("set_music_volume", [audio](float v) { audio->SetMusicVolume(v); });
   }
 };
 

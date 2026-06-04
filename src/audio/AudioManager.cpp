@@ -7,30 +7,28 @@
 #include "stb_vorbis.c"
 
 #include <SDL3/SDL.h>
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <iostream>
-#include <algorithm>
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 bool AudioManager::LoadOgg(const std::string &path, AudioClip &out) {
-  int channels = 0, sampleRate = 0;
-  short *decoded = nullptr;  // stb_vorbis returns interleaved s16
+  int   channels = 0, sampleRate = 0;
+  short *decoded  = nullptr;
   const int frames = stb_vorbis_decode_filename(
       path.c_str(), &channels, &sampleRate, &decoded);
   if (frames <= 0 || !decoded) {
     std::cerr << "[AudioManager] stb_vorbis failed: '" << path << "'\n";
     return false;
   }
-
-  // Convert interleaved s16 -> float32 in [-1, 1]
   const size_t total = static_cast<size_t>(frames * channels);
   out.samples.resize(total);
   for (size_t i = 0; i < total; ++i)
     out.samples[i] = static_cast<float>(decoded[i]) / 32768.f;
-
   out.channels   = channels;
   out.sampleRate = sampleRate;
   free(decoded);
@@ -46,18 +44,15 @@ bool AudioManager::LoadWav(const std::string &path, AudioClip &out) {
               << "': " << SDL_GetError() << '\n';
     return false;
   }
-  // Convert to float32 via a temporary stream
   SDL_AudioSpec dst{SDL_AUDIO_F32, spec.channels, spec.freq};
   SDL_AudioStream *cvt = SDL_CreateAudioStream(&spec, &dst);
   SDL_PutAudioStreamData(cvt, buf, static_cast<int>(len));
   SDL_FlushAudioStream(cvt);
   SDL_free(buf);
-
   const int avail = SDL_GetAudioStreamAvailable(cvt);
   out.samples.resize(static_cast<size_t>(avail) / sizeof(float));
   SDL_GetAudioStreamData(cvt, out.samples.data(), avail);
   SDL_DestroyAudioStream(cvt);
-
   out.channels   = spec.channels;
   out.sampleRate = spec.freq;
   return true;
@@ -79,12 +74,10 @@ bool AudioManager::LoadClip(const std::string &path, AudioClip &out) {
 // ---------------------------------------------------------------------------
 
 AudioManager::AudioManager() {
-  m_spec = {SDL_AUDIO_F32, 2, 44100};
+  m_spec     = {SDL_AUDIO_F32, 2, 44100};
   m_deviceId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &m_spec);
-  if (m_deviceId == 0) {
-    std::cerr << "[AudioManager] SDL_OpenAudioDevice failed: "
-              << SDL_GetError() << '\n';
-  }
+  if (m_deviceId == 0)
+    std::cerr << "[AudioManager] SDL_OpenAudioDevice failed: " << SDL_GetError() << '\n';
 }
 
 AudioManager::~AudioManager() {
@@ -116,10 +109,10 @@ void AudioManager::PlaySfx(int handle, float volume) {
 
   const AudioClip &clip = it->second;
   SDL_AudioSpec src{SDL_AUDIO_F32, clip.channels, clip.sampleRate};
-
   SDL_AudioStream *stream = SDL_CreateAudioStream(&src, &m_spec);
   if (!stream) return;
 
+  // Scale volume on a copy so the stored clip is unchanged.
   std::vector<float> buf = clip.samples;
   const float v = std::clamp(volume, 0.f, 1.f);
   for (auto &s : buf) s *= v;
@@ -128,12 +121,15 @@ void AudioManager::PlaySfx(int handle, float volume) {
       static_cast<int>(buf.size() * sizeof(float)));
   SDL_FlushAudioStream(stream);
   SDL_BindAudioStream(m_deviceId, stream);
-  SDL_SetAudioStreamPutCallback(stream, [](void * /*ud*/, SDL_AudioStream *s, int, int avail) {
-    if (avail == 0) {
-      SDL_UnbindAudioStream(s);
-      SDL_DestroyAudioStream(s);
-    }
-  }, nullptr);
+
+  // Self-destruct once the stream has been fully consumed.
+  SDL_SetAudioStreamPutCallback(stream,
+      [](void *, SDL_AudioStream *s, int, int avail) {
+        if (avail == 0) {
+          SDL_UnbindAudioStream(s);
+          SDL_DestroyAudioStream(s);
+        }
+      }, nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,28 +149,31 @@ void AudioManager::AudioCallback(void *userdata, SDL_AudioStream *stream,
   static_cast<AudioManager *>(userdata)->FeedMusic(stream, additionalAmount);
 }
 
-void AudioManager::FeedMusic(SDL_AudioStream *stream, int additionalAmount) {
+void AudioManager::FeedMusic(SDL_AudioStream *stream, int bytes) {
   if (m_currentMusic < 0) return;
   const auto it = m_musicClips.find(m_currentMusic);
   if (it == m_musicClips.end()) return;
 
-  const AudioClip &clip     = it->second;
-  const size_t    total     = clip.samples.size();
-  int             remaining = additionalAmount;
+  const AudioClip &clip = it->second;
+  const size_t    total = clip.samples.size();
 
+  // Use a stack buffer to avoid heap allocation on the audio thread.
+  static constexpr size_t kBufFloats = 2048;
+  std::array<float, kBufFloats> buf;
+
+  int remaining = bytes;
   while (remaining > 0) {
-    const size_t floatsNeeded = static_cast<size_t>(remaining) / sizeof(float);
-    const size_t floatsAvail  = total - m_musicPos;
-
+    const size_t floatsAvail = total - m_musicPos;
     if (floatsAvail == 0) {
       if (!m_musicLoop) break;
       m_musicPos = 0;
       continue;
     }
+    const size_t floatsWanted = std::min(
+        static_cast<size_t>(remaining) / sizeof(float),
+        kBufFloats);
+    const size_t chunk = std::min(floatsWanted, floatsAvail);
 
-    const size_t chunk = std::min(floatsNeeded, floatsAvail);
-
-    std::vector<float> buf(chunk);
     for (size_t i = 0; i < chunk; ++i)
       buf[i] = clip.samples[m_musicPos + i] * m_musicVolume;
 
@@ -191,13 +190,11 @@ void AudioManager::PlayMusic(int handle, bool loop) {
     SDL_DestroyAudioStream(m_musicStream);
     m_musicStream = nullptr;
   }
-
   const auto it = m_musicClips.find(handle);
   if (it == m_musicClips.end()) return;
 
   const AudioClip &clip = it->second;
   SDL_AudioSpec src{SDL_AUDIO_F32, clip.channels, clip.sampleRate};
-
   m_musicStream = SDL_CreateAudioStream(&src, &m_spec);
   if (!m_musicStream) return;
 
@@ -218,13 +215,12 @@ void AudioManager::ResumeMusic() {
 }
 
 void AudioManager::StopMusic() {
-  if (m_musicStream) {
-    SDL_UnbindAudioStream(m_musicStream);
-    SDL_DestroyAudioStream(m_musicStream);
-    m_musicStream  = nullptr;
-    m_currentMusic = -1;
-    m_musicPos     = 0;
-  }
+  if (!m_musicStream) return;
+  SDL_UnbindAudioStream(m_musicStream);
+  SDL_DestroyAudioStream(m_musicStream);
+  m_musicStream  = nullptr;
+  m_currentMusic = -1;
+  m_musicPos     = 0;
 }
 
 void AudioManager::SetMusicVolume(float volume) {

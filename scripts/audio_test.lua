@@ -1,36 +1,25 @@
 -- audio_test.lua
--- Tests the full audio API:
---   SPACE      -> play laser SFX
---   F          -> play explosion SFX
---   P          -> toggle music pause/resume
---   UP/DOWN    -> music volume +/-
---   ESCAPE     -> quit
+-- SPACE      -> play laser SFX
+-- F          -> play explosion SFX
+-- P          -> pause / resume music
+-- UP / DOWN  -> music volume +/-
+-- ESCAPE     -> quit
 
 local SFX_LASER     = "assets/audio/sfx/laserSmall_000.ogg"
 local SFX_EXPLOSION = "assets/audio/sfx/explosionCrunch_000.ogg"
 local MUSIC_TRACK   = "assets/audio/music/jingles_NES00.ogg"
 
-log("[audio_test] script started")
-log("[audio_test] engine.on_update type: " .. type(engine.on_update))
-log("[audio_test] engine.is_key_just_pressed type: " .. type(engine.is_key_just_pressed))
-log("[audio_test] engine.quit type: " .. type(engine.quit))
-
--- Load assets (returns -1 and prints a warning if the file is missing)
 local laser     = engine.load_sfx(SFX_LASER)
 local explosion = engine.load_sfx(SFX_EXPLOSION)
 local music     = engine.load_music(MUSIC_TRACK)
 
-if laser     == -1 then log("WARNING: could not load " .. SFX_LASER)     end
-if explosion == -1 then log("WARNING: could not load " .. SFX_EXPLOSION) end
-if music     == -1 then log("WARNING: could not load " .. MUSIC_TRACK)   end
+if laser     == -1 then log("[audio_test] WARNING: could not load " .. SFX_LASER)     end
+if explosion == -1 then log("[audio_test] WARNING: could not load " .. SFX_EXPLOSION) end
+if music     == -1 then log("[audio_test] WARNING: could not load " .. MUSIC_TRACK)   end
 
-log("[audio_test] laser=" .. tostring(laser) .. "  explosion=" .. tostring(explosion) .. "  music=" .. tostring(music))
-
--- Start music looping at half volume
 engine.set_music_volume(0.5)
 engine.play_music(music, true)
 
--- HUD
 local function make_label(text, y)
   local e = world.create_entity()
   world.add_transform(e, 20, y, 0, 0)
@@ -50,34 +39,16 @@ local vol_label = world.create_entity()
 world.add_transform(vol_label, 20, 160, 0, 0)
 world.add_text(vol_label, string.format("Music volume: %.0f%%", volume * 100), 16, 100, 220, 100)
 
-local frame = 0
-
 engine.on_update(function(dt)
-  frame = frame + 1
-  if frame <= 5 then
-    log("[audio_test] on_update frame=" .. frame .. "  dt=" .. tostring(dt))
-  end
-
-  -- Log every key check on the first 5 frames so we can see values
-  if frame <= 5 then
-    log("[audio_test] SPACE=" .. tostring(engine.is_key_just_pressed("SPACE"))
-      .. "  F=" .. tostring(engine.is_key_just_pressed("F"))
-      .. "  P=" .. tostring(engine.is_key_just_pressed("P"))
-      .. "  ESCAPE=" .. tostring(engine.is_key_just_pressed("ESCAPE")))
-  end
-
   if engine.is_key_just_pressed("SPACE") then
-    log("[audio_test] SPACE -> play laser")
     if laser ~= -1 then engine.play_sfx(laser, 1.0) end
   end
 
   if engine.is_key_just_pressed("F") then
-    log("[audio_test] F -> play explosion")
     if explosion ~= -1 then engine.play_sfx(explosion, 1.0) end
   end
 
   if engine.is_key_just_pressed("P") then
-    log("[audio_test] P -> toggle pause (paused=" .. tostring(paused) .. ")")
     if paused then
       engine.resume_music()
       paused = false
@@ -89,22 +60,17 @@ engine.on_update(function(dt)
 
   if engine.is_key_just_pressed("UP") then
     volume = math.min(1.0, volume + 0.1)
-    log("[audio_test] UP -> volume=" .. string.format("%.1f", volume))
     engine.set_music_volume(volume)
     world.set_text(vol_label, string.format("Music volume: %.0f%%", volume * 100))
   end
 
   if engine.is_key_just_pressed("DOWN") then
     volume = math.max(0.0, volume - 0.1)
-    log("[audio_test] DOWN -> volume=" .. string.format("%.1f", volume))
     engine.set_music_volume(volume)
     world.set_text(vol_label, string.format("Music volume: %.0f%%", volume * 100))
   end
 
   if engine.is_key_just_pressed("ESCAPE") then
-    log("[audio_test] ESCAPE -> quit")
     engine.quit()
   end
 end)
-
-log("[audio_test] on_update registered")
