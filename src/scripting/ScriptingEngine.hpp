@@ -22,7 +22,8 @@ public:
   // Bind subsystems — call once during Game::Initialize before RunString.
   void BindWorld   (World *world, TextureManager *textures);
   void BindInput   (InputManager *input, SDL_Window *window,
-                    SDL_Renderer *renderer, SceneManager *scenes);
+                    SDL_Renderer *renderer, SceneManager *scenes,
+                    World *world);   // world needed for engine.set_camera
   void BindTextures(TextureManager *textures);
   void BindAudio   (AudioManager *audio);
 
