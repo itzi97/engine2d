@@ -1,7 +1,5 @@
 -- asteroids.lua
 -- Controls: LEFT/RIGHT rotate, UP thrust, SPACE fire, P pause, ESCAPE main menu
--- Waves are loaded from Tiled .tmj files (object layer only).
--- Each asteroid object carries "speed" and "size" custom properties.
 
 dofile("scripts/util.lua")
 
@@ -18,14 +16,17 @@ local MAP_WAVE     = {
   "assets/maps/asteroids_wave5.tmj",
 }
 
-local ROT_SPEED     = 180   -- degrees / sec
-local THRUST        = 260   -- pixels / sec²
-local DRAG          = 0.98  -- velocity multiplier per frame
+local ROT_SPEED     = 180
+local THRUST        = 260
+local DRAG          = 0.98
 local BULLET_SPEED  = 520
-local BULLET_LIFE   = 1.2   -- seconds
-local FIRE_COOLDOWN = 0.22  -- seconds between shots
+local BULLET_LIFE   = 1.2
+local FIRE_COOLDOWN = 0.22
 local MAX_LIVES     = 3
-local INVULN_TIME   = 2.0   -- seconds of invulnerability after respawn
+local INVULN_TIME   = 2.0
+
+-- Asteroid base spin (deg/s).  Each rock is randomised in spawn_asteroid.
+local SPIN_BASE     = 60
 
 local ASTEROID_RENDER = { large = 48, medium = 32, small = 20 }
 
@@ -59,18 +60,19 @@ local wave_clear = false
 local wc_timer   = 0
 
 local player     = nil
-local ship_angle = 0   -- degrees, 0 = up
+local ship_angle = 0
 local invuln     = 0
 local fire_cd    = 0
 
-local asteroids  = {}   -- { id, vx, vy, rot_speed, rot, size }
-local bullets    = {}   -- { id, life }
-local explosions = {}   -- { id, timer }
+local asteroids  = {}
+local bullets    = {}
+local explosions = {}
 
-local hud_score   = nil
-local hud_lives   = nil
-local hud_wave    = nil
-local hud_overlay = nil
+local hud_score       = nil
+local hud_lives       = nil
+local hud_wave        = nil
+local hud_overlay     = nil   -- main message  (large, centred)
+local hud_overlay_sub = nil   -- hint line     (small, centred below)
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -83,6 +85,29 @@ local function wrap(x, y)
   if y >  H + 24 then y = -24     end
   if y < -24     then y =  H + 24 end
   return x, y
+end
+
+-- Approximate pixel width: ~10 px per char at size 28, ~7 px per char at size 18
+local function approx_x(text, size)
+  local cw = size * 0.55
+  return math.floor(W/2 - (#text * cw) / 2)
+end
+
+local function overlay_show(msg, sub, mr, mg, mb, sr, sg, sb)
+  local mx = approx_x(msg, 28)
+  world.set_position(hud_overlay, mx, H/2 - 28)
+  world.set_text(hud_overlay, msg)
+  world.set_text_color(hud_overlay, mr or 255, mg or 255, mb or 255, 255)
+
+  local sx = approx_x(sub, 18)
+  world.set_position(hud_overlay_sub, sx, H/2 + 12)
+  world.set_text(hud_overlay_sub, sub)
+  world.set_text_color(hud_overlay_sub, sr or 200, sg or 200, sb or 200, 255)
+end
+
+local function overlay_hide()
+  world.set_text(hud_overlay,     "")
+  world.set_text(hud_overlay_sub, "")
 end
 
 local function spawn_explosion(x, y)
@@ -115,13 +140,15 @@ local function spawn_asteroid(x, y, size, speed_mul)
   world.add_tag(e, "asteroid")
   local angle = math.random() * math.pi * 2
   local spd   = (size == "large" and 55 or size == "medium" and 85 or 120) * (speed_mul or 1.0)
-  local rot   = (math.random() - 0.5) * 120
+  -- Random spin: magnitude 0.5x–3x base, direction random
+  local spin_mag = SPIN_BASE * (0.5 + math.random() * 2.5)
+  local spin_dir = math.random(0, 1) == 0 and 1 or -1
   asteroids[#asteroids + 1] = {
     id        = e,
     vx        = math.cos(angle) * spd,
     vy        = math.sin(angle) * spd,
-    rot_speed = rot,
-    rot       = 0,
+    rot_speed = spin_dir * spin_mag,
+    rot       = math.random() * 360,   -- random starting angle too
     size      = size,
   }
 end
@@ -155,13 +182,12 @@ local function update_hud()
 end
 
 -- ---------------------------------------------------------------------------
--- Load wave from Tiled map  (called in-place — no scene reload)
+-- Load wave (in-place, no scene reload)
 -- ---------------------------------------------------------------------------
 local function load_wave(w_idx)
-  -- Destroy leftover entities from the previous wave
   if player then world.destroy_entity(player); player = nil end
-  for _, b in ipairs(bullets)    do world.destroy_entity(b.id)  end
-  for _, a in ipairs(asteroids)  do world.destroy_entity(a.id)  end
+  for _, b  in ipairs(bullets)    do world.destroy_entity(b.id)  end
+  for _, a  in ipairs(asteroids)  do world.destroy_entity(a.id)  end
   for _, ex in ipairs(explosions) do world.destroy_entity(ex.id) end
 
   asteroids  = {}
@@ -170,15 +196,11 @@ local function load_wave(w_idx)
   wave_clear = false
   wc_timer   = 0
 
-  -- Clear the overlay text from the previous wave banner
-  if hud_overlay then
-    world.set_text(hud_overlay, "")
-  end
+  overlay_hide()
 
-  local map_path = MAP_WAVE[w_idx]
-  local objects  = world.load_tiled_map(map_path)
-
+  local objects  = world.load_tiled_map(MAP_WAVE[w_idx])
   local spawn_x, spawn_y = W/2, H/2
+
   for _, obj in pairs(objects) do
     if obj.type == "player_spawn" then
       spawn_x = obj.x + obj.w / 2
@@ -204,14 +226,15 @@ end
 -- HUD + pause
 -- ---------------------------------------------------------------------------
 local function build_hud()
-  hud_score   = make_label(10,        8, "SCORE  0",   18, 255, 255, 255)
-  hud_lives   = make_label(10,       34, "LIVES ||||", 18, 255, 220,  80)
-  hud_wave    = make_label(W - 140,   8, "WAVE 1 / " .. #MAP_WAVE, 18, 180, 220, 255)
-  hud_overlay = make_label(W/2 - 200, H/2 - 20, "",   32, 255,  80,  80)
-  world.set_layer(hud_score,   50)
-  world.set_layer(hud_lives,   50)
-  world.set_layer(hud_wave,    50)
-  world.set_layer(hud_overlay, 50)
+  hud_score       = make_label(10,      8,  "SCORE  0",  18, 255, 255, 255)
+  hud_lives       = make_label(10,      34, "LIVES ||||", 18, 255, 220,  80)
+  hud_wave        = make_label(W-140,   8,  "WAVE 1 / " .. #MAP_WAVE, 18, 180, 220, 255)
+  -- Overlay labels start empty; overlay_show positions them dynamically
+  hud_overlay     = make_label(0, 0, "", 28, 255, 255, 255)
+  hud_overlay_sub = make_label(0, 0, "", 18, 200, 200, 200)
+  for _, e in ipairs({hud_score, hud_lives, hud_wave, hud_overlay, hud_overlay_sub}) do
+    world.set_layer(e, 50)
+  end
   update_hud()
 end
 
@@ -220,12 +243,8 @@ local pause_sel = 1
 
 local function toggle_pause()
   paused = not paused
-  if paused then
-    pause_sel = 1
-    pause_ui.show(pause_sel)
-  else
-    pause_ui.hide()
-  end
+  if paused then pause_sel = 1; pause_ui.show(pause_sel)
+  else pause_ui.hide() end
 end
 
 -- ---------------------------------------------------------------------------
@@ -253,7 +272,6 @@ init()
 -- ---------------------------------------------------------------------------
 engine.on_update(function(dt)
 
-  -- ---- pause menu -----------------------------------------------------------
   if engine.is_key_just_pressed("P") and not game_over and not you_win then
     toggle_pause()
   end
@@ -264,16 +282,12 @@ engine.on_update(function(dt)
     if engine.is_key_just_pressed("RETURN")
     or (pause_sel == 1 and engine.is_key_just_pressed("R"))
     or (pause_sel == 2 and engine.is_key_just_pressed("M")) then
-      if pause_sel == 1 then
-        toggle_pause()
-      else
-        engine.load_scene(function() dofile("scripts/main_menu.lua") end)
-      end
+      if pause_sel == 1 then toggle_pause()
+      else engine.load_scene(function() dofile("scripts/main_menu.lua") end) end
     end
     return
   end
 
-  -- ---- game over ------------------------------------------------------------
   if game_over then
     if engine.is_key_just_pressed("RETURN") then
       engine.load_scene(function() dofile("scripts/asteroids.lua") end)
@@ -284,7 +298,6 @@ engine.on_update(function(dt)
     return
   end
 
-  -- ---- you win --------------------------------------------------------------
   if you_win then
     if engine.is_key_just_pressed("RETURN") then
       engine.load_scene(function() dofile("scripts/asteroids.lua") end)
@@ -302,22 +315,18 @@ engine.on_update(function(dt)
       wave = wave + 1
       if wave > #MAP_WAVE then
         you_win = true
-        world.set_text(hud_overlay, "YOU WIN!   ENTER play again   ESC menu")
-        world.set_text_color(hud_overlay, 80, 255, 180, 255)
+        overlay_show("YOU WIN!", "ENTER play again   ESC menu",
+                     80, 255, 180,  160, 255, 200)
       else
-        -- Stay in the same Lua state — just reload the map in-place.
-        -- wave/score/lives are already the correct upvalues.
         load_wave(wave)
       end
     end
     return
   end
 
-  -- ---- timers ---------------------------------------------------------------
   invuln  = math.max(0, invuln  - dt)
   fire_cd = math.max(0, fire_cd - dt)
 
-  -- ---- player input ---------------------------------------------------------
   if player then
     if engine.is_key_pressed("LEFT")  then ship_angle = ship_angle - ROT_SPEED * dt end
     if engine.is_key_pressed("RIGHT") then ship_angle = ship_angle + ROT_SPEED * dt end
@@ -334,13 +343,11 @@ engine.on_update(function(dt)
       world.set_velocity(player, vx * DRAG, vy * DRAG)
     end
 
-    -- wrap player (centre-based)
     local px, py = world.get_position(player)
     local cx, cy = wrap(px + 24, py + 24)
     world.set_position(player, cx - 24, cy - 24)
     px, py = world.get_position(player)
 
-    -- fire
     if engine.is_key_just_pressed("SPACE") and fire_cd == 0 then
       fire_cd   = FIRE_COOLDOWN
       local rad = deg2rad(ship_angle - 90)
@@ -352,16 +359,13 @@ engine.on_update(function(dt)
       world.add_tag(b, "bullet")
       world.set_rotation(b, ship_angle)
       local pvx, pvy = world.get_velocity(player)
-      local bvx = math.cos(rad) * BULLET_SPEED + pvx
-      local bvy = math.sin(rad) * BULLET_SPEED + pvy
       world.add_kinematic(b)
-      world.set_velocity(b, bvx, bvy)
+      world.set_velocity(b, math.cos(rad)*BULLET_SPEED + pvx, math.sin(rad)*BULLET_SPEED + pvy)
       bullets[#bullets + 1] = { id = b, life = BULLET_LIFE }
       if sfx_laser ~= -1 then engine.play_sfx(sfx_laser, 0.8) end
     end
   end
 
-  -- ---- move asteroids -------------------------------------------------------
   for _, a in ipairs(asteroids) do
     local ax, ay = world.get_position(a.id)
     local rs     = ASTEROID_RENDER[a.size] or 32
@@ -373,40 +377,29 @@ engine.on_update(function(dt)
     world.set_rotation(a.id, a.rot)
   end
 
-  -- ---- age bullets (no wrapping — bullets expire when they leave the screen) -
   local live_bullets = {}
   for _, b in ipairs(bullets) do
     b.life = b.life - dt
-    if b.life <= 0 then
-      world.destroy_entity(b.id)
-    else
-      live_bullets[#live_bullets + 1] = b
-    end
+    if b.life <= 0 then world.destroy_entity(b.id)
+    else live_bullets[#live_bullets + 1] = b end
   end
   bullets = live_bullets
 
-  -- ---- age explosions -------------------------------------------------------
   local live_exp = {}
   for _, ex in ipairs(explosions) do
     ex.timer = ex.timer - dt
-    if ex.timer <= 0 then
-      world.destroy_entity(ex.id)
-    else
-      live_exp[#live_exp + 1] = ex
-    end
+    if ex.timer <= 0 then world.destroy_entity(ex.id)
+    else live_exp[#live_exp + 1] = ex end
   end
   explosions = live_exp
 
-  -- ---- collision: bullet vs asteroid ----------------------------------------
   local hit_asteroids = {}
   local hit_bullets   = {}
-
   for _, b in ipairs(bullets) do
     for _, col in ipairs(world.get_collisions_for(b.id)) do
       local other = col.a == b.id and col.b or col.a
       if world.get_tag(other) == "asteroid" then
-        hit_bullets[b.id]    = true
-        hit_asteroids[other] = true
+        hit_bullets[b.id] = true; hit_asteroids[other] = true
       end
     end
   end
@@ -440,7 +433,6 @@ engine.on_update(function(dt)
   end
   asteroids = kept_asteroids
 
-  -- ---- collision: asteroid vs player ----------------------------------------
   if player and invuln == 0 then
     for _, col in ipairs(world.get_collisions_for(player)) do
       local other = col.a == player and col.b or col.a
@@ -453,8 +445,8 @@ engine.on_update(function(dt)
         update_hud()
         if lives <= 0 then
           game_over = true
-          world.set_text(hud_overlay, "GAME OVER      ENTER restart      ESC menu")
-          world.set_text_color(hud_overlay, 255, 60, 60, 255)
+          overlay_show("GAME OVER", "ENTER restart   ESC menu",
+                       255, 60, 60,  220, 120, 120)
         else
           spawn_player(W/2, H/2)
         end
@@ -463,7 +455,6 @@ engine.on_update(function(dt)
     end
   end
 
-  -- invuln flash
   if player and invuln > 0 then
     local flash = math.floor(invuln * 10) % 2 == 0
     world.set_sprite_tint(player, 255, 255, 255, flash and 255 or 80)
@@ -471,16 +462,15 @@ engine.on_update(function(dt)
     world.set_sprite_tint(player, 255, 255, 255, 255)
   end
 
-  -- ---- wave clear check -----------------------------------------------------
   if #asteroids == 0 and not game_over and not wave_clear and not you_win then
     wave_clear = true
     wc_timer   = 2.5
     if wave < #MAP_WAVE then
-      world.set_text(hud_overlay, "WAVE CLEAR!")
-      world.set_text_color(hud_overlay, 80, 255, 140, 255)
+      overlay_show("WAVE CLEAR!", "next wave incoming...",
+                   80, 255, 140,  140, 220, 160)
     else
-      world.set_text(hud_overlay, "FINAL WAVE CLEAR!")
-      world.set_text_color(hud_overlay, 255, 220, 60, 255)
+      overlay_show("FINAL WAVE CLEAR!", "get ready...",
+                   255, 220, 60,  220, 200, 100)
     end
   end
 
