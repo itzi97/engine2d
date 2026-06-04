@@ -21,7 +21,6 @@ local PIN_Y = VIEW_H * 0.3
 local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
 local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
 
--- Tilt angle (degrees) applied when steering
 local TILT = 15
 
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
@@ -100,12 +99,12 @@ engine.on_update(function(dt)
 
   if left then
     world.set_sprite_flip(player, true, false)
-    set_rotation(-TILT)        -- lean left
+    set_rotation(TILT)         -- flipped sprite, so positive = leans left visually
   elseif right then
     world.set_sprite_flip(player, false, false)
-    set_rotation(TILT)         -- lean right
+    set_rotation(-TILT)        -- negative = leans right visually
   else
-    set_rotation(0)            -- snap back upright
+    set_rotation(0)
   end
 
   -- ── Camera follow ───────────────────────────────────────────────────────
