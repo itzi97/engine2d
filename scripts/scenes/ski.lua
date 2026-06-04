@@ -23,12 +23,10 @@ local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
 local TILT = 15
 
 -- Trail sprites (row 4, 0-indexed)
--- 10,4 = solid continuous trail
--- 11,4 = fading trail (bottom solid, top fades) — used as the fresh tip
-local TRAIL_SOLID = { x = 10*TILE, y = 4*TILE, w = TILE, h = TILE }
-local TRAIL_FADE  = { x = 11*TILE, y = 4*TILE, w = TILE, h = TILE }
-local TRAIL_SPACING = 8    -- px of Y travel before a new segment spawns
-local TRAIL_TTL     = 2.0  -- seconds before a segment disappears
+local TRAIL_SOLID   = { x = 10*TILE, y = 4*TILE, w = TILE, h = TILE }
+local TRAIL_FADE    = { x = 11*TILE, y = 4*TILE, w = TILE, h = TILE }
+local TRAIL_SPACING = TILE   -- one segment per tile: no overlap, no gap
+local TRAIL_TTL     = 2.0
 
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
 
@@ -72,20 +70,18 @@ local function set_rotation(deg)
 end
 
 -- Trail state
-local trail          = {}   -- array of { entity, ttl }
-local trail_y_accum  = 0    -- accumulated Y travel since last segment
+local trail         = {}
+local trail_y_accum = 0
 
 local function spawn_trail_segment(x, y)
-  -- Promote the previous tip from fade → solid
   if #trail > 0 then
     local prev = trail[#trail]
     world.set_sprite_src(prev.entity,
       TRAIL_SOLID.x, TRAIL_SOLID.y, TRAIL_SOLID.w, TRAIL_SOLID.h)
   end
-
   local e = world.create_entity()
   world.add_transform(e, x, y, TILE, TILE)
-  world.add_sprite(e, 255, 255, 255, 255, 5)   -- layer 5, behind player
+  world.add_sprite(e, 255, 255, 255, 255, 5)
   world.set_sprite_texture(e, atlas,
     TRAIL_FADE.x, TRAIL_FADE.y, TRAIL_FADE.w, TRAIL_FADE.h)
   table.insert(trail, { entity = e, ttl = TRAIL_TTL })
@@ -152,7 +148,6 @@ engine.on_update(function(dt)
   local px, py = world.get_position(player)
   engine.set_camera(px - PIN_X, py - PIN_Y)
 
-  -- Accumulate downward travel and spawn a segment when threshold crossed
   trail_y_accum = trail_y_accum + vy * dt
   if trail_y_accum >= TRAIL_SPACING then
     trail_y_accum = trail_y_accum - TRAIL_SPACING
