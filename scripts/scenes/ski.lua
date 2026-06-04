@@ -8,7 +8,17 @@ local VIEW_H = 18  * TILE   -- viewport stays 18 tiles tall
 engine.set_window_size(VIEW_W, VIEW_H)
 engine.set_window_title("Tiny Ski")
 
-local SPEED = 120
+-- ── Speed gears ────────────────────────────────────────────────────────────
+-- ↑ (just pressed) → shift down one gear
+-- ↓ (just pressed) → shift up one gear
+-- Forward (Y) speed is always positive — skier never stops.
+-- Horizontal speed scales with the current forward speed so steering
+-- feels consistent at every gear.
+local GEARS      = { "slow", "normal", "fast" }
+local GEAR_SPEED = { slow = 60, normal = 120, fast = 200 }
+local GEAR_STEER = { slow = 55, normal = 100, fast = 150 }
+local gear_idx   = 2   -- start at "normal"
+
 local PIN_X = VIEW_W * 0.5 - TILE * 0.5
 local PIN_Y = VIEW_H * 0.3
 
@@ -44,24 +54,28 @@ local steering = false
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
+  -- ── Gear shifting (one tap = one step) ─────────────────────────────────
+  if engine.is_key_just_pressed("up") then
+    gear_idx = math.max(1, gear_idx - 1)   -- shift down (slow)
+  end
+  if engine.is_key_just_pressed("down") then
+    gear_idx = math.min(#GEARS, gear_idx + 1) -- shift up (fast)
+  end
+
+  local gear_name = GEARS[gear_idx]
+  local vy = GEAR_SPEED[gear_name]   -- always positive: always skiing forward
+
+  -- ── Horizontal steering ─────────────────────────────────────────────────
   local left  = engine.is_key_pressed("left")
   local right = engine.is_key_pressed("right")
-  local up    = engine.is_key_pressed("up")
-  local down  = engine.is_key_pressed("down")
-
-  local vx, vy = 0, 0
-  if left  then vx = -SPEED end
-  if right then vx =  SPEED end
-  if up    then vy = -SPEED end
-  if down  then vy =  SPEED end
-
-  if vx ~= 0 and vy ~= 0 then
-    local inv = SPEED / math.sqrt(vx*vx + vy*vy)
-    vx, vy = vx * inv, vy * inv
-  end
+  local steer = GEAR_STEER[gear_name]
+  local vx = 0
+  if left  then vx = -steer end
+  if right then vx =  steer end
 
   world.set_velocity(player, vx, vy)
 
+  -- ── Sprite ──────────────────────────────────────────────────────────────
   local is_steering = left or right
   if is_steering ~= steering then
     steering = is_steering
@@ -74,15 +88,17 @@ engine.on_update(function(dt)
     world.set_sprite_flip(player, false, false)
   end
 
+  -- ── Camera follow ───────────────────────────────────────────────────────
   local px, py = world.get_position(player)
   local cx, cy = px - PIN_X, py - PIN_Y
   engine.set_camera(cx, cy)
 
-  -- DEBUG: show world pos and camera in title bar
+  -- Title: gear indicator + position (remove when done debugging)
   engine.set_window_title(string.format(
-    "Tiny Ski  |  world=(%.0f,%.0f)  cam=(%.0f,%.0f)",
-    px, py, cx, cy))
+    "Tiny Ski  |  [%s]  world=(%.0f,%.0f)",
+    gear_name, px, py))
 
+  -- ── Tile collision (solid layers only) ──────────────────────────────────
   local pw, ph = TILE, TILE
   local function solid(wx, wy)
     return world.is_tile_solid(math.floor(wx / TILE), math.floor(wy / TILE))
@@ -90,7 +106,7 @@ engine.on_update(function(dt)
   local bottom = py + ph
   if solid(px + pw*0.5, bottom) or solid(px+1, bottom) or solid(px+pw-1, bottom) then
     world.set_position(player, px, math.floor(bottom/TILE)*TILE - ph)
-    if vy > 0 then world.set_velocity(player, vx, 0) end
+    world.set_velocity(player, vx, 0)
   end
   if solid(px, py + ph*0.5) then
     world.set_position(player, math.floor(px/TILE)*TILE + TILE, py)
