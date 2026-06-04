@@ -71,8 +71,8 @@ local explosions = {}
 local hud_score       = nil
 local hud_lives       = nil
 local hud_wave        = nil
-local hud_overlay     = nil   -- main message  (large, centred)
-local hud_overlay_sub = nil   -- hint line     (small, centred below)
+local hud_overlay     = nil
+local hud_overlay_sub = nil
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -87,8 +87,6 @@ local function wrap(x, y)
   return x, y
 end
 
--- Centre an overlay label at a given screen position.
--- Uses the anchor API so text is always pixel-perfect regardless of string length.
 local function overlay_centre(entity, cx, cy)
   world.set_text_anchor(entity, 0.5, 0.5)
   world.set_position(entity, cx, cy)
@@ -107,6 +105,22 @@ end
 local function overlay_hide()
   world.set_text(hud_overlay,     "")
   world.set_text(hud_overlay_sub, "")
+end
+
+local function compact_in_place(list, is_dead, destroy_fn)
+  local write = 1
+  for read = 1, #list do
+    local item = list[read]
+    if is_dead(item) then
+      if destroy_fn then destroy_fn(item) end
+    else
+      list[write] = item
+      write = write + 1
+    end
+  end
+  for i = write, #list do
+    list[i] = nil
+  end
 end
 
 local function spawn_explosion(x, y)
@@ -139,7 +153,6 @@ local function spawn_asteroid(x, y, size, speed_mul)
   world.add_tag(e, "asteroid")
   local angle = math.random() * math.pi * 2
   local spd   = (size == "large" and 55 or size == "medium" and 85 or 120) * (speed_mul or 1.0)
-  -- Random spin: magnitude 0.5x–3x base, direction random
   local spin_mag = SPIN_BASE * (0.5 + math.random() * 2.5)
   local spin_dir = math.random(0, 1) == 0 and 1 or -1
   asteroids[#asteroids + 1] = {
@@ -189,15 +202,15 @@ local function load_wave(w_idx)
   for _, a  in ipairs(asteroids)  do world.destroy_entity(a.id)  end
   for _, ex in ipairs(explosions) do world.destroy_entity(ex.id) end
 
-  asteroids  = {}
   bullets    = {}
+  asteroids  = {}
   explosions = {}
   wave_clear = false
   wc_timer   = 0
 
   overlay_hide()
 
-  local objects  = world.load_tiled_map(MAP_WAVE[w_idx])
+  local objects = world.load_tiled_map(MAP_WAVE[w_idx])
   local spawn_x, spawn_y = W/2, H/2
 
   for _, obj in pairs(objects) do
@@ -225,10 +238,9 @@ end
 -- HUD + pause
 -- ---------------------------------------------------------------------------
 local function build_hud()
-  hud_score       = make_label(10,      8,  "SCORE  0",  18, 255, 255, 255)
-  hud_lives       = make_label(10,      34, "LIVES ||||", 18, 255, 220,  80)
-  hud_wave        = make_label(W-140,   8,  "WAVE 1 / " .. #MAP_WAVE, 18, 180, 220, 255)
-  -- Overlay labels start empty; overlay_show centres them via set_text_anchor
+  hud_score       = make_label(10,    8,  "SCORE  0", 18, 255, 255, 255)
+  hud_lives       = make_label(10,   34,  "LIVES ||||", 18, 255, 220, 80)
+  hud_wave        = make_label(W-140, 8,  "WAVE 1 / " .. #MAP_WAVE, 18, 180, 220, 255)
   hud_overlay     = make_label(0, 0, "", 28, 255, 255, 255)
   hud_overlay_sub = make_label(0, 0, "", 18, 200, 200, 200)
   for _, e in ipairs({hud_score, hud_lives, hud_wave, hud_overlay, hud_overlay_sub}) do
@@ -270,7 +282,6 @@ init()
 -- on_update
 -- ---------------------------------------------------------------------------
 engine.on_update(function(dt)
-
   if engine.is_key_just_pressed("P") and not game_over and not you_win then
     toggle_pause()
   end
@@ -307,7 +318,6 @@ engine.on_update(function(dt)
     return
   end
 
-  -- ---- wave clear -----------------------------------------------------------
   if wave_clear then
     wc_timer = wc_timer - dt
     if wc_timer <= 0 then
@@ -315,7 +325,7 @@ engine.on_update(function(dt)
       if wave > #MAP_WAVE then
         you_win = true
         overlay_show("YOU WIN!", "ENTER play again   ESC menu",
-                     80, 255, 180,  160, 255, 200)
+                     80, 255, 180, 160, 255, 200)
       else
         load_wave(wave)
       end
@@ -376,21 +386,27 @@ engine.on_update(function(dt)
     world.set_rotation(a.id, a.rot)
   end
 
-  local live_bullets = {}
   for _, b in ipairs(bullets) do
     b.life = b.life - dt
-    if b.life <= 0 then world.destroy_entity(b.id)
-    else live_bullets[#live_bullets + 1] = b end
   end
-  bullets = live_bullets
+  compact_in_place(bullets,
+    function(b)
+      return b.life <= 0
+    end,
+    function(b)
+      world.destroy_entity(b.id)
+    end)
 
-  local live_exp = {}
   for _, ex in ipairs(explosions) do
     ex.timer = ex.timer - dt
-    if ex.timer <= 0 then world.destroy_entity(ex.id)
-    else live_exp[#live_exp + 1] = ex end
   end
-  explosions = live_exp
+  compact_in_place(explosions,
+    function(ex)
+      return ex.timer <= 0
+    end,
+    function(ex)
+      world.destroy_entity(ex.id)
+    end)
 
   local hit_asteroids = {}
   local hit_bullets   = {}
@@ -398,21 +414,26 @@ engine.on_update(function(dt)
     for _, col in ipairs(world.get_collisions_for(b.id)) do
       local other = col.a == b.id and col.b or col.a
       if world.get_tag(other) == "asteroid" then
-        hit_bullets[b.id] = true; hit_asteroids[other] = true
+        hit_bullets[b.id] = true
+        hit_asteroids[other] = true
+        break
       end
     end
   end
 
-  local kept_bullets = {}
-  for _, b in ipairs(bullets) do
-    if hit_bullets[b.id] then world.destroy_entity(b.id)
-    else kept_bullets[#kept_bullets + 1] = b end
-  end
-  bullets = kept_bullets
+  compact_in_place(bullets,
+    function(b)
+      return hit_bullets[b.id]
+    end,
+    function(b)
+      world.destroy_entity(b.id)
+    end)
 
-  local kept_asteroids = {}
-  for _, a in ipairs(asteroids) do
-    if hit_asteroids[a.id] then
+  compact_in_place(asteroids,
+    function(a)
+      return hit_asteroids[a.id]
+    end,
+    function(a)
       local ax, ay = world.get_position(a.id)
       local rs     = ASTEROID_RENDER[a.size] or 32
       spawn_explosion(ax + rs/2, ay + rs/2)
@@ -426,11 +447,7 @@ engine.on_update(function(dt)
         spawn_asteroid(ax + rs/2, ay + rs/2, "small", 1.0)
         spawn_asteroid(ax + rs/2, ay + rs/2, "small", 1.0)
       end
-    else
-      kept_asteroids[#kept_asteroids + 1] = a
-    end
-  end
-  asteroids = kept_asteroids
+    end)
 
   if player and invuln == 0 then
     for _, col in ipairs(world.get_collisions_for(player)) do
@@ -445,7 +462,7 @@ engine.on_update(function(dt)
         if lives <= 0 then
           game_over = true
           overlay_show("GAME OVER", "ENTER restart   ESC menu",
-                       255, 60, 60,  220, 120, 120)
+                       255, 60, 60, 220, 120, 120)
         else
           spawn_player(W/2, H/2)
         end
@@ -466,10 +483,10 @@ engine.on_update(function(dt)
     wc_timer   = 2.5
     if wave < #MAP_WAVE then
       overlay_show("WAVE CLEAR!", "next wave incoming...",
-                   80, 255, 140,  140, 220, 160)
+                   80, 255, 140, 140, 220, 160)
     else
       overlay_show("FINAL WAVE CLEAR!", "get ready...",
-                   255, 220, 60,  220, 200, 100)
+                   255, 220, 60, 220, 200, 100)
     end
   end
 

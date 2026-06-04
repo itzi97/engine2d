@@ -10,18 +10,18 @@ dofile("scripts/util.lua")
 engine.set_window_title("Breakout")
 engine.set_window_size(1280, 720)
 
-local W, H           = 1280, 720
-local BALL_S         = 16
-local PAD_W, PAD_H   = 120, 14
+local W, H             = 1280, 720
+local BALL_S           = 16
+local PAD_W, PAD_H     = 120, 14
 local BRICK_W, BRICK_H = 72, 20
-local PAD_SPEED      = 520
+local PAD_SPEED        = 520
 
 local LEVELS = {
   { name = "Dungeon", map = "assets/maps/level1.tmj", label_col = {100, 120, 180} },
   { name = "Neon",    map = "assets/maps/level2.tmj", label_col = {60,  200, 180} },
 }
 
--- ─── AABB side detection ──────────────────────────────────────────────────────────────────────────────
+-- ─── AABB side detection ─────────────────────────────────────────────────────
 
 local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   local ol  = (ax + aw) - bx
@@ -35,7 +35,7 @@ local function hit_side(ax, ay, aw, ah, bx, by, bw, bh)
   end
 end
 
--- ─── game over screen ────────────────────────────────────────────────────────────────────────────
+-- ─── game over screen ────────────────────────────────────────────────────────
 
 local function game_over(score, won)
   local cx  = W / 2
@@ -56,7 +56,7 @@ local function game_over(score, won)
   end)
 end
 
--- ─── level select ──────────────────────────────────────────────────────────────────────────────
+-- ─── level select ────────────────────────────────────────────────────────────
 
 local chosen_level = 1
 
@@ -112,7 +112,7 @@ local function level_select()
   end)
 end
 
--- ─── start screen ──────────────────────────────────────────────────────────────────────────────
+-- ─── start screen ────────────────────────────────────────────────────────────
 
 function start_screen()
   local cx = W / 2
@@ -138,14 +138,16 @@ function start_screen()
   end)
 end
 
--- ─── gameplay ────────────────────────────────────────────────────────────────────────────────────
+-- ─── gameplay ────────────────────────────────────────────────────────────────
 
 function init()
   local lv = LEVELS[chosen_level]
 
   local map_objects = world.load_tiled_map(lv.map)
 
-  local bricks = {}
+  local bricks     = {}
+  local brick_map  = {}
+  local brick_count = 0
   for _, obj in pairs(map_objects) do
     if obj.type == "brick" then
       local r = tonumber(obj.properties["color_r"]) or 200
@@ -153,11 +155,12 @@ function init()
       local b = tonumber(obj.properties["color_b"]) or 200
       local e = make_sprite(obj.x, obj.y, obj.w, obj.h, r, g, b)
       world.add_tag(e, "brick")
-      table.insert(bricks, { entity = e, alive = true })
+      local brick = { entity = e, alive = true }
+      table.insert(bricks, brick)
+      brick_map[e] = brick
+      brick_count = brick_count + 1
     end
   end
-
-  local total_bricks = #bricks
 
   local ball_entity      = make_sprite(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
   local ball_vx, ball_vy = 260, -320
@@ -217,12 +220,8 @@ function init()
 
     world.set_position(ball_entity, bx, by)
 
-    local hits      = world.get_collisions_for(ball_entity)
-    local bounced   = false
-    local alive_count = 0
-    for _, brick in ipairs(bricks) do
-      if brick.alive then alive_count = alive_count + 1 end
-    end
+    local hits    = world.get_collisions_for(ball_entity)
+    local bounced = false
 
     for _, col in ipairs(hits) do
       local other = col.a == ball_entity and col.b or col.a
@@ -236,27 +235,26 @@ function init()
         world.set_position(ball_entity, bx, by)
 
       elseif tag == "brick" then
-        for _, brick in ipairs(bricks) do
-          if brick.alive and brick.entity == other then
-            if not bounced then
-              local rx, ry = world.get_position(other)
-              local side   = hit_side(bx, by, BALL_S, BALL_S, rx, ry, BRICK_W, BRICK_H)
-              if side == "left" or side == "right" then ball_vx = -ball_vx
-              else ball_vy = -ball_vy end
-              bounced = true
-            end
-            world.destroy_entity(brick.entity)
-            brick.alive  = false
-            alive_count  = alive_count - 1
-            score        = score + 10
-            world.set_text(score_entity, "Score: " .. score)
-            break
+        local brick = brick_map[other]
+        if brick and brick.alive then
+          if not bounced then
+            local rx, ry = world.get_position(other)
+            local side   = hit_side(bx, by, BALL_S, BALL_S, rx, ry, BRICK_W, BRICK_H)
+            if side == "left" or side == "right" then ball_vx = -ball_vx
+            else ball_vy = -ball_vy end
+            bounced = true
           end
+          world.destroy_entity(brick.entity)
+          brick.alive = false
+          brick_map[brick.entity] = nil
+          brick_count = brick_count - 1
+          score = score + 10
+          world.set_text(score_entity, "Score: " .. score)
         end
       end
     end
 
-    if alive_count == 0 then
+    if brick_count == 0 then
       engine.load_scene(function() game_over(score, true) end)
     end
   end)

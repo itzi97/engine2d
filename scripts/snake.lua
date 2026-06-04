@@ -11,28 +11,39 @@ local CELL = 32
 local COLS = 40
 local ROWS = 22
 local STEP = 1 / 10
+local MAX_CELLS = COLS * ROWS
 
--- ─── helpers ─────────────────────────────────────────────────────────────────────────────────────
+-- ─── helpers ─────────────────────────────────────────────────────────────────
 
 local function make_segment(x, y, r, g, b)
   return make_sprite(x, y, CELL, CELL, r, g, b)
 end
 
 local function spawn_food(snake_body)
-  local x, y
-  repeat
-    x = math.random(0, COLS - 1) * CELL
-    y = math.random(0, ROWS - 1) * CELL
-    local hit = false
-    for _, seg in ipairs(snake_body) do
-      local sx, sy = world.get_position(seg)
-      if sx == x and sy == y then hit = true; break end
+  if #snake_body >= MAX_CELLS then
+    return nil, nil
+  end
+
+  local occupied = {}
+  for _, seg in ipairs(snake_body) do
+    local sx, sy = world.get_position(seg)
+    occupied[sy * COLS + sx / CELL] = true
+  end
+
+  local start = math.random(0, MAX_CELLS - 1)
+  for offset = 0, MAX_CELLS - 1 do
+    local idx = (start + offset) % MAX_CELLS
+    if not occupied[idx] then
+      local cx = idx % COLS
+      local cy = math.floor(idx / COLS)
+      return cx * CELL, cy * CELL
     end
-  until not hit
-  return x, y
+  end
+
+  return nil, nil
 end
 
--- ─── game over screen ────────────────────────────────────────────────────────────────────────────
+-- ─── game over screen ────────────────────────────────────────────────────────
 
 local function game_over(score)
   local cx = W / 2
@@ -50,7 +61,7 @@ local function game_over(score)
   end)
 end
 
--- ─── start screen ──────────────────────────────────────────────────────────────────────────────
+-- ─── start screen ────────────────────────────────────────────────────────────
 
 local function start_screen()
   local cx = W / 2
@@ -67,7 +78,7 @@ local function start_screen()
   end)
 end
 
--- ─── gameplay ────────────────────────────────────────────────────────────────────────────────────
+-- ─── gameplay ────────────────────────────────────────────────────────────────
 
 function init()
   math.randomseed(os.time and os.time() or 12345)
@@ -84,7 +95,9 @@ function init()
   local food_entity = make_sprite(-CELL, -CELL, CELL, CELL, 255, 0, 0)
   do
     local fx, fy = spawn_food({head})
-    world.set_position(food_entity, fx, fy)
+    if fx and fy then
+      world.set_position(food_entity, fx, fy)
+    end
   end
 
   local score_entity = make_label(10, 4, "Length: 1", 22, 255, 255, 255)
@@ -119,6 +132,12 @@ function init()
       local all = {head}
       for _, s in ipairs(body) do table.insert(all, s) end
       local nfx, nfy = spawn_food(all)
+      if not nfx or not nfy then
+        score = #body + 1
+        world.set_text(score_entity, "Length: " .. score)
+        engine.load_scene(function() game_over(score) end)
+        return
+      end
       world.set_position(food_entity, nfx, nfy)
       score = #body + 1
       world.set_text(score_entity, "Length: " .. score)
