@@ -27,7 +27,6 @@ bool Game::Initialize() {
     return false;
   }
 
-  // Request focus on X11/XWayland; no-op on native Wayland (compositor decides).
   SDL_RaiseWindow(m_window);
 
   m_renderer = SDL_CreateRenderer(m_window, nullptr);
@@ -43,7 +42,7 @@ bool Game::Initialize() {
   m_audio     = std::make_unique<AudioManager>();
   m_scripting = std::make_unique<ScriptingEngine>();
 
-  m_scripting->BindWorld(m_world.get());
+  m_scripting->BindWorld(m_world.get(), m_textures.get());
   m_scripting->BindInput(m_input.get(), m_window);
   m_scripting->BindFonts(m_fonts.get());
   m_scripting->BindTextures(m_textures.get());
@@ -92,15 +91,13 @@ void Game::Run() {
   bool running  = true;
 
   while (running) {
-    // Clear one-frame transition flags before polling new events.
     m_input->EndFrame();
-
     ProcessEvents(running);
 
     const auto  now = steady_clock::now();
     const float dt  = std::min(
         static_cast<float>(duration<double>(now - previous).count()),
-        0.05f);  // cap at 50 ms to avoid spiral-of-death on pause
+        0.05f);
     previous = now;
 
     Update(dt);
