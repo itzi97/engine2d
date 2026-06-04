@@ -10,7 +10,7 @@ local COLS  = 40
 local ROWS  = 22
 local STEP  = 1/10
 
--- ─── helpers ───────────────────────────────────────────────────────────────
+-- ─── helpers ─────────────────────────────────────────────────────────────────────────
 
 local function make_segment(x, y, r, g, b)
   local e = world.create_entity()
@@ -33,15 +33,18 @@ local function spawn_food(snake_body)
   return x, y
 end
 
--- ─── pause overlay ─────────────────────────────────────────────────────────
+-- ─── pause overlay ───────────────────────────────────────────────────────────────────
 -- Returns a controller table with :show(sel) and :hide().
 -- `sel` is 1 = Resume highlighted, 2 = Main Menu highlighted.
 
 local function make_pause_overlay()
   local cx = W / 2
+  -- Visible position of the background panel
+  local BG_X = cx - 160
+  local BG_Y = 270
 
   local bg = world.create_entity()
-  world.add_transform(bg, cx - 160, 270, 320, 160)
+  world.add_transform(bg, BG_X, BG_Y, 320, 160)
   world.add_sprite(bg, 20, 20, 20, 200, 20)
 
   local title = world.create_entity()
@@ -74,19 +77,28 @@ local function make_pause_overlay()
   end
 
   return {
-    show = function(sel) refresh(sel) end,
+    show = function(sel)
+      -- Restore bg to its visible position
+      world.set_position(bg, BG_X, BG_Y)
+      world.set_text(title, "PAUSED")
+      world.set_text(opt1,  "Resume")
+      world.set_text(opt2,  "Main Menu")
+      world.set_text(hint,  "UP/DOWN  ENTER  or  R / M")
+      refresh(sel)
+    end,
     hide = function()
-      -- tint everything invisible (alpha 0 not supported in text; just blank text)
+      -- Move bg far off-screen; RenderSystem has no blend mode for
+      -- color-rect sprites so alpha=0 does not hide them.
+      world.set_position(bg, -9999, -9999)
       world.set_text(title, "")
       world.set_text(opt1,  "")
       world.set_text(opt2,  "")
       world.set_text(hint,  "")
-      world.add_sprite(bg, 0, 0, 0, 0, 20)
     end,
   }
 end
 
--- ─── game over screen ───────────────────────────────────────────────────
+-- ─── game over screen ─────────────────────────────────────────────────────────────────────
 
 local function game_over(score)
   local cx = W/2
@@ -114,7 +126,7 @@ local function game_over(score)
   log("snake: game over, score=" .. score)
 end
 
--- ─── start screen ──────────────────────────────────────────────────────────
+-- ─── start screen ────────────────────────────────────────────────────────────────────
 
 local function start_screen()
   local cx = W/2
@@ -138,7 +150,7 @@ local function start_screen()
   log("snake: start screen")
 end
 
--- ─── gameplay ────────────────────────────────────────────────────────────────
+-- ─── gameplay ────────────────────────────────────────────────────────────────────────────
 
 function init()
   math.randomseed(os.time and os.time() or 12345)
@@ -166,7 +178,7 @@ function init()
   local overlay = make_pause_overlay()
   overlay.hide()
 
-  -- ── snake step ───────────────────────────────────────────────────────
+  -- ── snake step ────────────────────────────────────────────────────────────────────
   local function snake_step()
     dir = next_dir
     local hx, hy = world.get_position(head)
@@ -200,7 +212,7 @@ function init()
     end
   end
 
-  -- ── update ───────────────────────────────────────────────────────────
+  -- ── update ────────────────────────────────────────────────────────────────────
   engine.on_update(function(dt)
     -- toggle pause
     if engine.is_key_just_pressed("ESCAPE") then
