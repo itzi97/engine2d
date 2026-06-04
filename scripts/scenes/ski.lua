@@ -1,29 +1,20 @@
 -- scripts/scenes/ski.lua
--- Kenney Tiny Ski — full game scene.
-
--- ── Display config ────────────────────────────────────────────────────────────────
 local TILE  = 16
 local MAP_W = 31
-local MAP_H = 18
+local MAP_H = 80   -- tall scrolling slope
 local VIEW_W = MAP_W * TILE
-local VIEW_H = MAP_H * TILE
+local VIEW_H = 18  * TILE   -- viewport stays 18 tiles tall
 
 engine.set_window_size(VIEW_W, VIEW_H)
 engine.set_window_title("Tiny Ski")
 
--- ── Game constants ────────────────────────────────────────────────────────
 local SPEED = 120
+local PIN_X = VIEW_W * 0.5 - TILE * 0.5
+local PIN_Y = VIEW_H * 0.3
 
--- Skier is pinned 30% from the top of the screen so there's
--- more visible slope ahead than behind.
-local PIN_X = VIEW_W * 0.5 - TILE * 0.5   -- horizontal centre
-local PIN_Y = VIEW_H * 0.3                 -- 30% from top
-
--- Sprite frames (stride = 16, no gap)
 local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
 local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
 
--- ── Boot ──────────────────────────────────────────────────────────────────
 local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
 
 local spawn_x = (MAP_W / 2) * TILE
@@ -39,7 +30,6 @@ end
 
 local atlas = engine.load_texture("assets/ski/tilemap_packed.png")
 
--- ── Player entity ─────────────────────────────────────────────────────────
 local player = world.create_entity()
 world.add_transform(player, spawn_x, spawn_y, TILE, TILE)
 world.add_sprite(player, 255, 255, 255, 255, 10)
@@ -47,16 +37,13 @@ world.set_sprite_texture(player, atlas, FRAME_IDLE.x, FRAME_IDLE.y, FRAME_IDLE.w
 world.add_kinematic(player)
 world.add_tag(player, "player")
 
--- Camera starts so skier is at PIN position on screen
 engine.set_camera(spawn_x - PIN_X, spawn_y - PIN_Y)
 
--- ── Update loop ───────────────────────────────────────────────────────────
 local steering = false
 
 engine.on_update(function(dt)
   if engine.is_key_just_pressed("escape") then engine.quit() end
 
-  -- ── Input ───────────────────────────────────────────────────────────────
   local left  = engine.is_key_pressed("left")
   local right = engine.is_key_pressed("right")
   local up    = engine.is_key_pressed("up")
@@ -75,7 +62,6 @@ engine.on_update(function(dt)
 
   world.set_velocity(player, vx, vy)
 
-  -- ── Sprite pose ───────────────────────────────────────────────────────────
   local is_steering = left or right
   if is_steering ~= steering then
     steering = is_steering
@@ -88,18 +74,13 @@ engine.on_update(function(dt)
     world.set_sprite_flip(player, false, false)
   end
 
-  -- ── Camera: pin skier to fixed screen position every frame ──────────────
-  -- The world moves; the skier appears stationary on screen.
   local px, py = world.get_position(player)
   engine.set_camera(px - PIN_X, py - PIN_Y)
 
-  -- ── AABB tile collision ─────────────────────────────────────────────────
-  px, py = world.get_position(player)
   local pw, ph = TILE, TILE
   local function solid(wx, wy)
     return world.is_tile_solid(math.floor(wx / TILE), math.floor(wy / TILE))
   end
-
   local bottom = py + ph
   if solid(px + pw*0.5, bottom) or solid(px+1, bottom) or solid(px+pw-1, bottom) then
     world.set_position(player, px, math.floor(bottom/TILE)*TILE - ph)
