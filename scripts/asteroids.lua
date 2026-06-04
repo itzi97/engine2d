@@ -55,12 +55,16 @@ local wave_clear = false
 local wc_timer   = 0
 
 local player     = nil
-local ship_angle = 0
+local ship_angle = 0   -- degrees, 0 = up
 local invuln     = 0
 local fire_cd    = 0
 
-local asteroids  = {}   -- { id, rot_speed, rot, size }
-local bullets    = {}   -- { id, vx, vy, life }
+-- Asteroids are still manually advanced (no KinematicComponent) so we can
+-- spin them independently of their linear motion.
+local asteroids  = {}   -- { id, vx, vy, rot_speed, rot, size }
+-- Bullets now have a KinematicComponent via set_velocity so PhysicsSystem
+-- integrates them; we only track life here.
+local bullets    = {}   -- { id, life }
 local explosions = {}   -- { id, timer }
 
 local hud_score   = nil
@@ -186,10 +190,10 @@ end
 -- HUD + pause
 -- ---------------------------------------------------------------------------
 local function build_hud()
-  hud_score   = make_label(10,       8, "SCORE  0",   18, 255, 255, 255)
-  hud_lives   = make_label(10,      34, "LIVES ||||", 18, 255, 220,  80)
-  hud_wave    = make_label(W - 110,  8, "WAVE 1",     18, 180, 220, 255)
-  hud_overlay = make_label(W/2 - 200, H/2 - 20, "",  32, 255,  80,  80)
+  hud_score   = make_label(10,        8, "SCORE  0",   18, 255, 255, 255)
+  hud_lives   = make_label(10,       34, "LIVES ||||", 18, 255, 220,  80)
+  hud_wave    = make_label(W - 110,   8, "WAVE 1",     18, 180, 220, 255)
+  hud_overlay = make_label(W/2 - 200, H/2 - 20, "",   32, 255,  80,  80)
   world.set_layer(hud_score,   50)
   world.set_layer(hud_lives,   50)
   world.set_layer(hud_wave,    50)
@@ -296,65 +300,59 @@ engine.on_update(function(dt)
       world.set_velocity(player, vx * DRAG, vy * DRAG)
     end
 
-    -- wrap player
+    -- wrap player (centre-based)
     local px, py = world.get_position(player)
-    world.set_position(player, wrap(px + 24, py + 24))
-    -- re-read after wrap so fire origin is correct
-    px, py = world.get_position(player)
-    -- (wrap returns the centre; adjust back to top-left)
-    -- Actually wrap() returns wrapped centre, so subtract half-size:
-    -- (already stored as top-left; wrap takes centre and returns centre)
-    -- Correct: pass top-left centre in, store back as top-left:
-    -- wrap(px+24, py+24) -> wrapped centre nx,ny -> set_position(nx-24, ny-24)
     local cx, cy = wrap(px + 24, py + 24)
     world.set_position(player, cx - 24, cy - 24)
-    px, py = world.get_position(player)
+    px, py = world.get_position(player)   -- re-read for fire origin below
 
     -- fire
     if engine.is_key_just_pressed("SPACE") and fire_cd == 0 then
       fire_cd   = FIRE_COOLDOWN
       local rad = deg2rad(ship_angle - 90)
+      -- spawn bullet at ship nose
       local bx  = px + 24 + math.cos(rad) * 26
       local by  = py + 24 + math.sin(rad) * 26
       local b   = world.create_entity()
       world.add_transform(b, bx - 2, by - 5, 4, 10)
       world.add_sprite(b, 255, 255, 120, 255, 3)
       world.add_tag(b, "bullet")
+      -- rotate the bullet sprite to match the ship heading
+      world.set_rotation(b, ship_angle)
+      -- give it a KinematicComponent so PhysicsSystem integrates it
       local pvx, pvy = world.get_velocity(player)
       local bvx = math.cos(rad) * BULLET_SPEED + pvx
       local bvy = math.sin(rad) * BULLET_SPEED + pvy
-      bullets[#bullets + 1] = { id = b, vx = bvx, vy = bvy, life = BULLET_LIFE }
+      world.set_velocity(b, bvx, bvy)
+      bullets[#bullets + 1] = { id = b, life = BULLET_LIFE }
       if sfx_laser ~= -1 then engine.play_sfx(sfx_laser, 0.8) end
     end
   end
 
-  -- ---- move asteroids -------------------------------------------------------
+  -- ---- move asteroids (manual — spin is independent of linear motion) -------
   for _, a in ipairs(asteroids) do
     local ax, ay = world.get_position(a.id)
     local rs     = ASTEROID_RENDER[a.size] or 32
-    -- advance by velocity
     ax = ax + a.vx * dt
     ay = ay + a.vy * dt
-    -- wrap (centre-based)
     local cx, cy = wrap(ax + rs/2, ay + rs/2)
     world.set_position(a.id, cx - rs/2, cy - rs/2)
     a.rot = a.rot + a.rot_speed * dt
     world.set_rotation(a.id, a.rot)
   end
 
-  -- ---- move & age bullets ---------------------------------------------------
+  -- ---- wrap bullets (PhysicsSystem moved them; we just wrap + age) ----------
   local live_bullets = {}
   for _, b in ipairs(bullets) do
     b.life = b.life - dt
     if b.life <= 0 then
       world.destroy_entity(b.id)
     else
-      -- advance bullet by its stored velocity
       local bx, by = world.get_position(b.id)
-      bx = bx + b.vx * dt
-      by = by + b.vy * dt
       local cx, cy = wrap(bx + 2, by + 5)
-      world.set_position(b.id, cx - 2, cy - 5)
+      if cx ~= bx + 2 or cy ~= by + 5 then
+        world.set_position(b.id, cx - 2, cy - 5)
+      end
       live_bullets[#live_bullets + 1] = b
     end
   end
