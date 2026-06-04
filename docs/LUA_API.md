@@ -47,16 +47,49 @@ callbacks are not firing.
 | `world.add_transform(id, x, y, w, h)` | — | Add a `TransformComponent` |
 | `world.set_position(id, x, y)` | — | Set world position |
 | `world.get_position(id)` | `x, y` | Get world position |
+| `world.set_rotation(id, deg)` | — | Set rotation in degrees |
+| `world.get_rotation(id)` | `deg` | Get rotation in degrees |
+
+### Physics (KinematicComponent)
+
+Adding a `KinematicComponent` opts the entity into `PhysicsSystem`, which
+integrates velocity and acceleration into position each frame.
+
+| Function | Returns | Description |
+|---|---|---|
+| `world.add_kinematic(id)` | — | Add a `KinematicComponent` (required for velocity integration) |
 | `world.set_velocity(id, vx, vy)` | — | Set velocity (units/sec) |
 | `world.get_velocity(id)` | `vx, vy` | Get velocity |
+| `world.set_acceleration(id, ax, ay)` | — | Set constant acceleration (units/sec²) |
 
 ### Sprite
 
 | Function | Returns | Description |
 |---|---|---|
 | `world.add_sprite(id, r, g, b, a [, layer])` | — | Add a solid-colour rect sprite. Optional `layer` (int, default 0) sets render order. |
-| `world.add_texture_sprite(id, tex, sx, sy, sw, sh)` | — | Add a textured sprite with source rect |
 | `world.set_layer(id, layer)` | — | Set render layer (lower = drawn first). Calls `MarkSortDirty` internally. |
+| `world.set_sprite_texture(id, tex, sx, sy, sw, sh)` | — | Set texture handle + source rect in one call |
+| `world.set_sprite_src(id, sx, sy, sw, sh)` | — | Update source rect on an already-textured sprite |
+| `world.set_sprite_flip(id, flipX, flipY)` | — | Flip sprite horizontally and/or vertically |
+| `world.set_sprite_tint(id, r, g, b [, a])` | — | Tint colour multiplied over the sprite (0–255 per channel). `a` defaults to 255. |
+
+### Animation
+
+An `AnimationComponent` requires a `SpriteComponent` to be present. It drives
+the sprite's `srcRect` each frame.
+
+| Function | Returns | Description |
+|---|---|---|
+| `world.add_animation(id, frames, dur [, loop])` | — | Add an animation. `frames` is an array of `{x,y,w,h}` tables, `dur` is seconds per frame, `loop` defaults to `true`. |
+| `world.set_animation_playing(id, bool)` | — | Pause (`false`) or resume (`true`) the animation. |
+| `world.reset_animation(id)` | — | Restart animation from frame 0. |
+
+```lua
+world.add_animation(ship, {
+  { x=0,  y=0, w=32, h=32 },
+  { x=32, y=0, w=32, h=32 },
+}, 0.1)   -- 0.1s per frame, looping
+```
 
 ### Text
 
@@ -88,15 +121,17 @@ category (e.g. all `"enemy"` hits) without tracking individual IDs.
 
 | Function | Returns | Description |
 |---|---|---|
-| `world.load_tiled_map(path)` | table | Parse a Tiled `.tmj` file. Returns a table keyed by object **name**. |
+| `world.load_tiled_map(path)` | table | Parse a Tiled `.tmj` file. Tile layers are spawned automatically as sprite entities. Returns a table keyed by object **name**. |
 
 Each entry in the returned table has the following fields:
 
 | Field | Type | Description |
 |---|---|---|
+| `.entity` | id | The ECS entity spawned for this object |
 | `.type` | string | Tiled object class (e.g. `"brick"`, `"player"`) |
 | `.x`, `.y` | number | Top-left position in pixels |
 | `.w`, `.h` | number | Width and height in pixels |
+| `.name` | string | Tiled object name |
 | `.properties` | table | Custom properties from Tiled, string → string |
 
 ```lua
@@ -106,10 +141,8 @@ for name, obj in pairs(objects) do
         local r = tonumber(obj.properties["color_r"]) or 200
         local g = tonumber(obj.properties["color_g"]) or 200
         local b = tonumber(obj.properties["color_b"]) or 200
-        local e = world.create_entity()
-        world.add_transform(e, obj.x, obj.y, obj.w, obj.h)
-        world.add_sprite(e, r, g, b, 255)
-        world.add_tag(e, "brick")
+        -- obj.entity already has TransformComponent + TagComponent from MapSystem
+        world.add_sprite(obj.entity, r, g, b, 255)
     end
 end
 ```
@@ -156,57 +189,76 @@ Any name accepted by SDL's `SDL_GetKeyFromName` is valid.
 
 | Function | Returns | Description |
 |---|---|---|
-| `engine.load_texture(path)` | `tex` handle | Load a texture from disk for use with `add_texture_sprite` |
+| `engine.load_texture(path)` | `tex` handle | Load a texture from disk. Pass the handle to `world.set_sprite_texture`. |
 
 ### Audio
 
-| Function | Description |
-|---|---|
-| `engine.play_music(path)` | Start looping background music from file |
-| `engine.stop_music()` | Stop background music |
-| `engine.play_sfx(path [, volume])` | Play a one-shot sound effect. `volume` is 0.0–1.0 (default 1.0) |
-| `engine.set_music_volume(v)` | Set music volume (0.0–1.0) |
+Audio is handle-based. Load assets once at scene init, then pass handles to
+playback functions.
+
+| Function | Returns | Description |
+|---|---|---|
+| `engine.load_sfx(path)` | `int` handle | Decode and cache a sound effect (OGG/WAV). Returns `-1` on failure. |
+| `engine.play_sfx(handle [, volume])` | — | Play a one-shot SFX. `volume` is 0.0–1.0 (default 1.0). |
+| `engine.load_music(path)` | `int` handle | Load a music track for streaming. Returns `-1` on failure. |
+| `engine.play_music(handle [, loop])` | — | Start music playback. `loop` defaults to `true`. |
+| `engine.pause_music()` | — | Pause currently playing music. |
+| `engine.resume_music()` | — | Resume paused music. |
+| `engine.stop_music()` | — | Stop music and rewind. |
+| `engine.set_music_volume(v)` | — | Set music volume (0.0–1.0). |
+
+```lua
+-- Typical audio setup in scene init:
+local sfx_laser = engine.load_sfx("assets/audio/sfx/laser.ogg")
+local music     = engine.load_music("assets/audio/music/theme.ogg")
+engine.set_music_volume(0.6)
+engine.play_music(music)
+
+engine.on_update(function(dt)
+    if engine.is_key_just_pressed("SPACE") then
+        engine.play_sfx(sfx_laser)
+    end
+end)
+```
 
 ---
 
 ## Full Example
 
 ```lua
--- Boot: set window
+dofile("scripts/util.lua")   -- make_label, make_sprite, make_pause_overlay
+
 engine.set_window_title("My Game")
 engine.set_window_size(1280, 720)
 
 -- Load assets
-local tex = engine.load_texture("assets/player.png")
-engine.play_music("assets/bgm.ogg")
+local tex       = engine.load_texture("assets/player.png")
+local sfx_jump  = engine.load_sfx("assets/audio/sfx/jump.ogg")
+local music     = engine.load_music("assets/audio/music/theme.ogg")
+engine.set_music_volume(0.6)
+engine.play_music(music)
 
 -- Spawn player
 local player = world.create_entity()
 world.add_transform(player, 100, 100, 32, 32)
-world.add_texture_sprite(player, tex, 0, 0, 32, 32)
+world.set_sprite_texture(player, tex, 0, 0, 32, 32)
 world.add_tag(player, "player")
 world.set_layer(player, 1)
 
 -- HUD
-local hud = world.create_entity()
-world.add_transform(hud, 10, 4, 0, 0)
-world.add_text(hud, "Score: 0", 22, 255, 255, 255)
+local hud = make_label(10, 4, "Score: 0", 22, 255, 255, 255)
 
--- Environment (spawned from Tiled map)
+-- Environment from Tiled map
 local objects = world.load_tiled_map("assets/maps/level1.tmj")
 for name, obj in pairs(objects) do
     if obj.type == "wall" then
-        local e = world.create_entity()
-        world.add_transform(e, obj.x, obj.y, obj.w, obj.h)
-        world.add_sprite(e, 80, 80, 255, 255)
-        world.add_tag(e, "wall")
+        world.add_sprite(obj.entity, 80, 80, 255, 255)
     end
 end
 
 local score = 0
 
 engine.on_update(function(dt)
-    -- Movement
     local speed = 150
     local vx, vy = 0, 0
     if engine.is_key_pressed("RIGHT") then vx =  speed end
@@ -215,11 +267,14 @@ engine.on_update(function(dt)
     if engine.is_key_pressed("UP")    then vy = -speed end
     world.set_velocity(player, vx, vy)
 
+    if engine.is_key_just_pressed("SPACE") then
+        engine.play_sfx(sfx_jump)
+    end
+
     if engine.is_key_just_pressed("ESCAPE") then
         engine.quit()
     end
 
-    -- Collision response
     for _, col in ipairs(world.get_collisions_for(player)) do
         local other = col.a == player and col.b or col.a
         if world.get_tag(other) == "wall" then

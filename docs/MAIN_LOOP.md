@@ -10,7 +10,7 @@ dependency on the one before it.
 2. SDL_PollEvent loop                     — feed events into InputManager; catch SDL_EVENT_QUIT
 3. World::Update(dt)                      — PhysicsSystem → AnimationSystem
 4. ScriptingEngine::CallOnUpdate(dt)      — Lua engine.on_update callback
-5. World::RunCollision()                  — broadphase + AABB, results stored on World
+5. World::RunCollision()                  — SpatialHash broadphase + AABB narrow-phase
 6. World::FlushDestroyQueue()             — apply all pending DestroyEntity calls
 7. Render + SDL_RenderPresent
 ```
@@ -43,22 +43,22 @@ of the logic phase, before rendering.
 
 ---
 
-## Fixed Timestep
+## Timestep
 
-The loop uses an **accumulator-based fixed timestep** at 60 Hz
-(`kFixedDt = 1/60 s`).
+The loop uses a **variable timestep** — raw wall-clock delta time between
+frames, capped at 50 ms to prevent the spiral-of-death on very slow frames
+(e.g. a debugger pause or OS scheduler hiccup).
 
+```cpp
+const float dt = std::min(
+    static_cast<float>(duration<double>(now - previous).count()),
+    0.05f);   // cap: never simulate more than 50 ms in one tick
 ```
-accumulator += rawDeltaTime
-while accumulator >= kFixedDt:
-    Update(kFixedDt)
-    accumulator -= kFixedDt
-```
 
-This decouples the physics/animation update rate from the render frame rate
-and prevents the spiral-of-death (slow frame → larger dt → more work → slower
-frame). On a very slow machine, multiple `Update` ticks may run per rendered
-frame — systems must not assume one update = one rendered frame.
+This means physics and animation run at the actual frame rate. For games where
+physics determinism or a stable simulation rate matters, a fixed-timestep
+accumulator can be layered in by wrapping `World::Update(kFixedDt)` in the
+standard accumulator pattern — but this is not currently implemented.
 
 ---
 
@@ -79,6 +79,6 @@ knowledge of SDL constants.
 
 `engine.load_scene(fn)` is the safe way to switch scenes from Lua. Internally
 it schedules a scene reload: at the end of the current frame the engine calls
-`World::Clear()` (destroys all entities and flushes storages) and then
+`World::ClearAll()` (destroys all entities and flushes storages) and then
 executes `fn()` as the new scene's init function. This avoids destroying
 entities mid-frame while `on_update` is still running.
