@@ -170,12 +170,21 @@ public:
     m_nextId = 0;
     m_camX   = 0.f;
     m_camY   = 0.f;
+    // m_fontPath is intentionally NOT reset — it is set once at boot
+    // by engine.set_font_path() in scripts/main.lua and must survive
+    // scene transitions.
   }
 
   // --- Camera -------------------------------------------------------------
   void  SetCamera(float x, float y) noexcept { m_camX = x; m_camY = y; }
   float CamX() const noexcept { return m_camX; }
   float CamY() const noexcept { return m_camY; }
+
+  // --- Font path ----------------------------------------------------------
+  // Set once from scripts/main.lua via engine.set_font_path().
+  // Survives scene transitions (not cleared in ClearAll).
+  void               SetFontPath(const std::string &p) { m_fontPath = p; }
+  const std::string &GetFontPath()               const { return m_fontPath; }
 
   template <ComponentType T, typename... Args>
   T &AddComponent(EntityId entity, Args &&...args) {
@@ -261,9 +270,12 @@ private:
   std::queue<EntityId>   m_freeList;
   std::vector<EntityId>  m_pendingDestroy;
   std::vector<Collision> m_collisions;
-  EntityId               m_nextId = 0;
-  float                  m_camX   = 0.f;
-  float                  m_camY   = 0.f;
+  EntityId               m_nextId  = 0;
+  float                  m_camX    = 0.f;
+  float                  m_camY    = 0.f;
+  // Safe default matches the CMake-downloaded font location.
+  // Overridden at boot by engine.set_font_path() in scripts/main.lua.
+  std::string            m_fontPath{"assets/fonts/DejaVuSans.ttf"};
 
   template <ComponentType T>
   PackedStorage<T> &GetOrCreateStorage() {

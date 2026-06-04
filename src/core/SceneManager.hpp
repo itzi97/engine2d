@@ -9,13 +9,12 @@ class ScriptingEngine;
 // SceneManager maps scene names to Lua script paths and drives transitions
 // through the existing ScriptingEngine::TakePendingScene() flow.
 //
-// Registration:
-//   scenes.Register("menu",   "scripts/scenes/menu.lua");
-//   scenes.Register("ski",    "scripts/scenes/ski.lua");
-//   scenes.Register("finish", "scripts/scenes/finish.lua");
+// Registration (from scripts/main.lua via scene.register()):
+//   scene.register("ski",    "scripts/scenes/ski.lua")
+//   scene.register("menu",   "scripts/scenes/menu.lua")
 //
-// Lua-side (via engine.scene.load):
-//   engine.scene.load("ski")
+// Lua-side transitions:
+//   scene.load("ski")
 class SceneManager {
 public:
   explicit SceneManager(ScriptingEngine &scripting);
@@ -29,6 +28,12 @@ public:
 
   // Returns the path of the currently active scene (empty if none loaded).
   [[nodiscard]] const std::filesystem::path &ActivePath() const { return m_activePath; }
+
+  // Returns the full name->path registry.
+  // Used by Game.cpp to set up hot-reload watchers after scripts/main.lua
+  // has called scene.register() for all scenes.
+  [[nodiscard]] const std::unordered_map<std::string, std::filesystem::path> &
+  AllScenes() const { return m_registry; }
 
 private:
   ScriptingEngine                                        &m_scripting;
