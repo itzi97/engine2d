@@ -11,8 +11,10 @@ include(cmake/EmbedScript.cmake)
 # ---------------------------------------------------------------------------
 # Game selection
 # ---------------------------------------------------------------------------
-set(GAME "snake" CACHE STRING "Game script to embed (filename without .lua)")
-set_property(CACHE GAME PROPERTY STRINGS snake breakout sprite_test audio_test)
+# Default is main_menu — the shared entry point that dofile()s game scripts.
+# Use -DGAME=snake or -DGAME=breakout to launch a game directly (dev/testing).
+set(GAME "main_menu" CACHE STRING "Game script to embed (filename without .lua)")
+set_property(CACHE GAME PROPERTY STRINGS main_menu snake breakout sprite_test audio_test)
 
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/scripts/${GAME}.lua")
   message(FATAL_ERROR "Game script not found: scripts/${GAME}.lua")
