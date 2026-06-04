@@ -69,12 +69,19 @@ void ScriptingEngine::QueueScene(std::function<void()> fn) {
 
 void ScriptingEngine::CallOnUpdate(float dt) {
   if (!m_onUpdate.valid()) {
-    static int warnCount = 0;
-    if (warnCount++ < 3)
-      std::cerr << "[ScriptingEngine] frame-" << warnCount
-                << " on_update.valid() = 0\n";
+    // Frames 1-3 are normal: the scene transition hasn't fired yet.
+    // Only warn if on_update is still missing after 10 frames — that
+    // means the script forgot to call engine.on_update(function(dt) ... end).
+    static int missingFrames = 0;
+    if (++missingFrames > 10)
+      std::cerr << "[ScriptingEngine] on_update not registered after "
+                << missingFrames << " frames — did the script call engine.on_update?\n";
     return;
   }
+  // Reset counter so it works correctly after a scene reload.
+  static int missingFrames = 0;
+  missingFrames = 0;
+
   auto result = m_onUpdate(dt);
   if (!result.valid()) {
     sol::error err = result;
