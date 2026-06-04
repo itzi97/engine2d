@@ -1,7 +1,7 @@
 -- scripts/scenes/ski.lua
-local TILE  = 16
-local MAP_W = 31
-local MAP_H = 80
+local TILE  = 32
+local MAP_W = 16
+local MAP_H = 800
 local VIEW_W = MAP_W * TILE
 local VIEW_H = 18  * TILE
 
@@ -17,18 +17,19 @@ local gear_idx   = 2
 local PIN_X = VIEW_W * 0.5 - TILE * 0.5
 local PIN_Y = VIEW_H * 0.3
 
--- Atlas frames
-local FRAME_IDLE  = { x = 10*TILE, y = 5*TILE, w = TILE, h = TILE }
-local FRAME_STEER = { x = 11*TILE, y = 5*TILE, w = TILE, h = TILE }
+-- Atlas frames (sprite sheet coords stay in 16px units — source art is 16px)
+local SRC = 16   -- source tile size in the atlas
+local FRAME_IDLE  = { x = 10*SRC, y = 5*SRC, w = SRC, h = SRC }
+local FRAME_STEER = { x = 11*SRC, y = 5*SRC, w = SRC, h = SRC }
 local TILT = 15
 
 -- Trail sprites (row 4, 0-indexed)
-local TRAIL_SOLID   = { x = 10*TILE, y = 4*TILE, w = TILE, h = TILE }
-local TRAIL_FADE    = { x = 11*TILE, y = 4*TILE, w = TILE, h = TILE }
-local TRAIL_SPACING = TILE   -- one segment per tile: no overlap, no gap
+local TRAIL_SOLID   = { x = 10*SRC, y = 4*SRC, w = SRC, h = SRC }
+local TRAIL_FADE    = { x = 11*SRC, y = 4*SRC, w = SRC, h = SRC }
+local TRAIL_SPACING = TILE
 local TRAIL_TTL     = 2.0
 
-local objects = world.load_tiled_map("assets/maps/sampleMap.tmj")
+local objects = world.load_tiled_map("assets/maps/longMap.tmj")
 
 local spawn_x = (MAP_W / 2) * TILE
 local spawn_y = 2 * TILE
