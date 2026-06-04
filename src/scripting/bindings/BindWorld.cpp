@@ -19,11 +19,16 @@
 #include "rendering/TextureManager.hpp"
 
 #include <SDL3/SDL.h>
+#include <memory>
 #include <optional>
 
 void BindWorld(sol::state &lua, World *world, TextureManager *textures,
                std::optional<TiledMap> &lastMap) {
   auto w = lua.create_named_table("world");
+
+  // Tile entities spawned by the most recent load_tiled_map call.
+  // Shared between load_tiled_map and scale_tile_entities closures.
+  auto lastTileEntities = std::make_shared<std::vector<EntityId>>();
 
   // --- Entity lifecycle ---------------------------------------------------
   w.set_function("create_entity",  [world]() -> EntityId { return world->CreateEntity(); });
@@ -181,8 +186,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
         if (auto *t = world->GetComponent<TagComponent>(e)) return t->tag;
         return "";
       });
-
-  // Returns a Lua array of entity IDs that have the given tag.
   w.set_function("get_entities_tagged",
       [&lua, world](const std::string &tag) -> sol::table {
         auto tbl = lua.create_table();
@@ -191,8 +194,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
           tbl[static_cast<int>(i + 1)] = ids[i];
         return tbl;
       });
-
-  // Returns a Lua array of ALL entity IDs that have a TagComponent.
   w.set_function("get_all_entities",
       [&lua, world]() -> sol::table {
         auto tbl = lua.create_table();
@@ -270,9 +271,6 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
       });
 
   // --- Tile solid query ---------------------------------------------------
-  // world.is_tile_solid(col, row) -> bool
-  // Returns true if any layer whose name contains "solid" or "collision"
-  // has a non-zero tile GID at (col, row).
   w.set_function("is_tile_solid",
       [&lastMap](int col, int row) -> bool {
         if (!lastMap) return false;
@@ -292,7 +290,7 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
 
   // --- Tiled map loading --------------------------------------------------
   w.set_function("load_tiled_map",
-      [&lua, world, textures, &lastMap](const std::string &path) -> sol::table {
+      [&lua, world, textures, &lastMap, lastTileEntities](const std::string &path) -> sol::table {
         TiledMap map;
         try {
             map = MapLoader::Load(path);
@@ -302,6 +300,10 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
         }
 
         SpawnResult result = MapSystem::Spawn(map, *world, *textures);
+
+        // Store tile entities so scale_tile_entities can find them.
+        *lastTileEntities = result.tileEntities;
+
         lastMap = std::move(map);
 
         auto tbl = lua.create_table();
@@ -329,5 +331,21 @@ void BindWorld(sol::state &lua, World *world, TextureManager *textures,
             tbl[key] = obj;
         }
         return tbl;
+      });
+
+  // --- Scale tile entities -----------------------------------------------
+  // world.scale_tile_entities(scale)
+  // Multiplies every tile entity's position and size by `scale`.
+  // Call once immediately after load_tiled_map to apply a Lua-side display scale.
+  w.set_function("scale_tile_entities",
+      [world, lastTileEntities](float scale) {
+        for (const EntityId e : *lastTileEntities) {
+          auto *t = world->GetComponent<TransformComponent>(e);
+          if (!t) continue;
+          t->position.x *= scale;
+          t->position.y *= scale;
+          t->size.x     *= scale;
+          t->size.y     *= scale;
+        }
       });
 }
