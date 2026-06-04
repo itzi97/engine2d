@@ -14,6 +14,11 @@ local BRICK_OFFSET_X = 43
 local BRICK_OFFSET_Y = 60
 local PAD_SPEED      = 520
 
+local LEVELS = {
+  { name = "Dungeon", map = "assets/maps/level1.tmj", label_col = {100, 120, 180} },
+  { name = "Neon",    map = "assets/maps/level2.tmj", label_col = {60,  200, 180} },
+}
+
 -- ─── helpers ───────────────────────────────────────────────────────────────
 
 local function make_entity(x, y, w, h, r, g, b)
@@ -85,7 +90,7 @@ local function make_pause_overlay()
   }
 end
 
--- ─── game over screen ───────────────────────────────────────────────────
+-- ─── game over screen ───────────────────────────────────────────────────────
 
 local function game_over(score, won)
   local cx   = W/2
@@ -116,33 +121,121 @@ local function game_over(score, won)
   log("breakout: game over, score=" .. score .. ", won=" .. tostring(won))
 end
 
--- ─── start screen ──────────────────────────────────────────────────────────
+-- ─── level select ──────────────────────────────────────────────────────────
 
-local function start_screen()
-  local cx = W/2
-  local e1 = world.create_entity()
-  world.add_transform(e1, cx - 110, 260, 0, 0)
-  world.add_text(e1, "BREAKOUT", 64, 80, 160, 255)
+local chosen_level = 1
 
-  local e2 = world.create_entity()
-  world.add_transform(e2, cx - 160, 360, 0, 0)
-  world.add_text(e2, "ENTER to play   M for menu", 26, 180, 180, 180)
+local function level_select()
+  local cx = W / 2
+
+  local title_e = world.create_entity()
+  world.add_transform(title_e, cx - 110, 200, 0, 0)
+  world.add_text(title_e, "BREAKOUT", 56, 80, 160, 255)
+
+  local sub_e = world.create_entity()
+  world.add_transform(sub_e, cx - 100, 278, 0, 0)
+  world.add_text(sub_e, "Choose a level", 26, 180, 180, 180)
+
+  local sel_labels = {}
+  for i, lv in ipairs(LEVELS) do
+    local e = world.create_entity()
+    local lx = cx - 200 + (i - 1) * 230
+    world.add_transform(e, lx, 340, 0, 0)
+    world.add_text(e,
+      "[" .. i .. "]  " .. lv.name,
+      32,
+      lv.label_col[1], lv.label_col[2], lv.label_col[3])
+    sel_labels[i] = e
+  end
+
+  local hint_e = world.create_entity()
+  world.add_transform(hint_e, cx - 220, 420, 0, 0)
+  world.add_text(hint_e, "LEFT/RIGHT or 1/2 to pick   ENTER to confirm   M = menu", 20, 120, 120, 120)
+
+  local cursor_e = world.create_entity()
+  world.add_transform(cursor_e, 0, 390, 0, 0)
+  world.add_text(cursor_e, "v", 20, 255, 220, 80)
+
+  local sel = 1
+
+  local function refresh()
+    for i, e in ipairs(sel_labels) do
+      local lv = LEVELS[i]
+      if i == sel then
+        world.set_text_color(e, 255, 255, 100, 255)
+      else
+        world.set_text_color(e, lv.label_col[1], lv.label_col[2], lv.label_col[3], 255)
+      end
+    end
+    local lx = cx - 200 + (sel - 1) * 230 + 30
+    world.set_position(cursor_e, lx, 390)
+  end
+
+  refresh()
 
   engine.on_update(function(dt)
+    if engine.is_key_just_pressed("LEFT") then
+      sel = (sel == 1) and #LEVELS or sel - 1
+      refresh()
+    end
+    if engine.is_key_just_pressed("RIGHT") then
+      sel = (sel == #LEVELS) and 1 or sel + 1
+      refresh()
+    end
+    if engine.is_key_just_pressed("1") then sel = 1; refresh() end
+    if engine.is_key_just_pressed("2") then sel = 2; refresh() end
     if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
-      engine.load_scene(init)
+      chosen_level = sel
+      engine.load_scene(function() start_screen() end)
     end
     if engine.is_key_just_pressed("M") or engine.is_key_just_pressed("ESCAPE") then
       engine.load_scene(function() dofile("scripts/main_menu.lua") end)
     end
   end)
 
-  log("breakout: start screen")
+  log("breakout: level select")
 end
 
--- ─── gameplay ────────────────────────────────────────────────────────────────
+-- ─── start screen ──────────────────────────────────────────────────────────
+
+function start_screen()
+  local cx = W/2
+  local lv = LEVELS[chosen_level]
+
+  local e1 = world.create_entity()
+  world.add_transform(e1, cx - 110, 260, 0, 0)
+  world.add_text(e1, "BREAKOUT", 64, 80, 160, 255)
+
+  local e2 = world.create_entity()
+  world.add_transform(e2, cx - 80, 345, 0, 0)
+  world.add_text(e2, "Level: " .. lv.name, 28, lv.label_col[1], lv.label_col[2], lv.label_col[3])
+
+  local e3 = world.create_entity()
+  world.add_transform(e3, cx - 210, 400, 0, 0)
+  world.add_text(e3, "ENTER to play   BACKSPACE = pick level   M = menu", 22, 180, 180, 180)
+
+  engine.on_update(function(dt)
+    if engine.is_key_just_pressed("RETURN") or engine.is_key_just_pressed("RETURN2") then
+      engine.load_scene(init)
+    end
+    if engine.is_key_just_pressed("BACKSPACE") then
+      engine.load_scene(level_select)
+    end
+    if engine.is_key_just_pressed("M") or engine.is_key_just_pressed("ESCAPE") then
+      engine.load_scene(function() dofile("scripts/main_menu.lua") end)
+    end
+  end)
+
+  log("breakout: start screen, level=" .. lv.name)
+end
+
+-- ─── gameplay ───────────────────────────────────────────────────────────────
 
 function init()
+  local lv = LEVELS[chosen_level]
+  world.load_tiled_map(lv.map)
+  log("breakout: loaded map " .. lv.map)
+
   local ball_entity      = make_entity(W/2 - BALL_S/2, H - 160, BALL_S, BALL_S, 255, 255, 255)
   local ball_vx, ball_vy = 260, -320
   local paddle_entity    = make_entity(W/2 - PAD_W/2, H - 48, PAD_W, PAD_H, 80, 160, 255)
@@ -178,9 +271,7 @@ function init()
   local overlay = make_pause_overlay()
   overlay.hide()
 
-  -- ── update ───────────────────────────────────────────────────────────
   engine.on_update(function(dt)
-    -- toggle pause
     if engine.is_key_just_pressed("ESCAPE") then
       paused = not paused
       if paused then
@@ -213,13 +304,11 @@ function init()
       return
     end
 
-    -- paddle
     local px, py = world.get_position(paddle_entity)
     if engine.is_key_pressed("LEFT")  then px = math.max(0,       px - PAD_SPEED * dt) end
     if engine.is_key_pressed("RIGHT") then px = math.min(W-PAD_W, px + PAD_SPEED * dt) end
     world.set_position(paddle_entity, px, py)
 
-    -- ball movement
     local bx, by = world.get_position(ball_entity)
     bx = bx + ball_vx * dt
     by = by + ball_vy * dt
@@ -280,7 +369,7 @@ function init()
     end
   end)
 
-  log("breakout: gameplay started")
+  log("breakout: gameplay started, level=" .. lv.name)
 end
 
-start_screen()
+level_select()
